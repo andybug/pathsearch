@@ -91,7 +91,13 @@ fn main() -> process::ExitCode {
     let mut matched_files: Vec<PathBuf> = Vec::new();
 
     for dir in config.dirs {
-        let files = fs::read_dir(&dir).expect("Failed to read directory");
+        let files = match fs::read_dir(&dir) {
+            Ok(files) => files,
+            Err(e) => {
+                eprintln!("Failed to read directory: '{}': {}", dir.display(), e);
+                continue;
+            }
+        };
 
         for file in files {
             let matched = file_filters.iter().fold(true, |result, filter| {
