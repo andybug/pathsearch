@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::fs::DirEntry;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -27,6 +27,20 @@ struct Args {
         help = "Sort files by similarity to search"
     )]
     sort: bool,
+    #[clap(
+        long,
+        value_enum,
+        default_value = "auto",
+        help = "Choose whether to emit color output"
+    )]
+    color: ColorOption,
+}
+
+#[derive(ValueEnum, Clone, Debug)]
+enum ColorOption {
+    Auto,
+    Always,
+    Never,
 }
 
 #[derive(PartialEq, PartialOrd)]
@@ -62,13 +76,18 @@ impl Config {
             (true, false, true) => SearchType::Fuzzy,
             (true, true, true) => SearchType::Substring, // TODO: print warning here?
         };
+        let color = match args.color {
+            ColorOption::Always => true,
+            ColorOption::Never => false,
+            ColorOption::Auto => atty::is(atty::Stream::Stdout),
+        };
 
         Config {
             dirs: dirs,
             search: args.filename.unwrap_or(String::from("undefined")),
             search_type: search_type,
             sort: args.sort,
-            color: true,
+            color: color,
         }
     }
 
