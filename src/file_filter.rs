@@ -2,7 +2,6 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use regex::Regex;
 use std::fs::DirEntry;
-use std::os::unix::fs::PermissionsExt;
 
 pub trait FileFilter {
     fn filter(&self, file: &DirEntry) -> bool;
@@ -74,15 +73,5 @@ impl FileFilter for RegexFilter {
         } else {
             false
         }
-    }
-}
-
-pub struct ExecutableFilter {}
-
-impl FileFilter for ExecutableFilter {
-    fn filter(&self, file: &DirEntry) -> bool {
-        let metadata = file.metadata().expect("Failed to get metadata for file");
-        let permissions = metadata.permissions();
-        permissions.mode() & 0o111 != 0
     }
 }

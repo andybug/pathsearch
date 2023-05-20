@@ -1,10 +1,12 @@
 use clap::Parser;
+use std::fs::DirEntry;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs, process};
 use strsim::jaro_winkler;
 
 mod file_filter;
-use file_filter::{ExecutableFilter, FileFilter, FuzzyFilter, RegexFilter, SubstringFilter};
+use file_filter::{FileFilter, FuzzyFilter, RegexFilter, SubstringFilter};
 
 #[derive(Parser, Debug)]
 #[command(name = "pathsearch", about = "Look for executables in the search path")]
@@ -86,8 +88,6 @@ fn main() -> process::ExitCode {
         SearchType::Fuzzy => file_filters.push(Box::new(FuzzyFilter::new(&config.search))),
     }
 
-    file_filters.push(Box::new(ExecutableFilter {}));
-
     let mut matched_files: Vec<PathBuf> = Vec::new();
 
     for dir in config.dirs {
@@ -104,7 +104,7 @@ fn main() -> process::ExitCode {
                 result && filter.filter(file.as_ref().unwrap())
             });
 
-            if matched {
+            if matched && is_executable(file.as_ref().unwrap()) {
                 matched_files.push(file.as_ref().unwrap().path());
             }
         }
@@ -128,4 +128,10 @@ fn sort_files_by_similarity(filename: &str, matched_files: &mut Vec<PathBuf>) {
         // Convert the similarity score to a negative integer for descending order sorting
         (similarity * -1.0 * 1000.0) as i32
     });
+}
+
+fn is_executable(file: &DirEntry) -> bool {
+    let metadata = file.metadata().expect("Failed to get metadata for file");
+    let permissions = metadata.permissions();
+    permissions.mode() & 0o111 != 0 && metadata.is_file()
 }
