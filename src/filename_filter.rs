@@ -3,8 +3,13 @@ use fuzzy_matcher::FuzzyMatcher;
 use regex::Regex;
 use std::fs::DirEntry;
 
+pub enum FileNameMatch {
+    None,
+    SingleRange((usize, usize)),
+}
+
 pub trait FileNameFilter {
-    fn filter(&self, file: &DirEntry) -> bool;
+    fn filter(&self, file: &DirEntry) -> Option<FileNameMatch>;
 }
 
 pub struct SubstringFilter {
@@ -20,11 +25,16 @@ impl SubstringFilter {
 }
 
 impl FileNameFilter for SubstringFilter {
-    fn filter(&self, file: &DirEntry) -> bool {
+    fn filter(&self, file: &DirEntry) -> Option<FileNameMatch> {
         if let Some(file_name) = file.file_name().to_str() {
-            return file_name.contains(&self.pattern);
+            if let Some(index) = file_name.find(&self.pattern) {
+                return Some(FileNameMatch::SingleRange((
+                    index,
+                    index + self.pattern.len(),
+                )));
+            }
         }
-        false
+        None
     }
 }
 
@@ -43,14 +53,15 @@ impl FuzzyFilter {
 }
 
 impl FileNameFilter for FuzzyFilter {
-    fn filter(&self, file: &DirEntry) -> bool {
+    fn filter(&self, file: &DirEntry) -> Option<FileNameMatch> {
         let file_name = file.file_name();
         if let Some(file_name_str) = file_name.to_str() {
-            self.skim_matcher
-                .fuzzy_match(file_name_str, &self.pattern)
-                .is_some()
+            match self.skim_matcher.fuzzy_match(file_name_str, &self.pattern) {
+                Some(_score) => return Some(FileNameMatch::None),
+                None => return None,
+            }
         } else {
-            false
+            None
         }
     }
 }
@@ -67,11 +78,19 @@ impl RegexFilter {
 }
 
 impl FileNameFilter for RegexFilter {
-    fn filter(&self, file: &DirEntry) -> bool {
+    fn filter(&self, file: &DirEntry) -> Option<FileNameMatch> {
         if let Some(file_name) = file.file_name().to_str() {
-            self.regex.is_match(file_name)
+            match self.regex.find(file_name) {
+                Some(first_match) => {
+                    return Some(FileNameMatch::SingleRange((
+                        first_match.start(),
+                        first_match.end(),
+                    )))
+                }
+                None => return None,
+            }
         } else {
-            false
+            None
         }
     }
 }
@@ -79,7 +98,7 @@ impl FileNameFilter for RegexFilter {
 pub struct MatchAllFilter {}
 
 impl FileNameFilter for MatchAllFilter {
-    fn filter(&self, _file: &DirEntry) -> bool {
-        true
+    fn filter(&self, _file: &DirEntry) -> Option<FileNameMatch> {
+        Some(FileNameMatch::None)
     }
 }

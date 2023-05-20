@@ -6,7 +6,9 @@ use std::{env, fs, process};
 use strsim::jaro_winkler;
 
 mod filename_filter;
-use filename_filter::{FileNameFilter, FuzzyFilter, MatchAllFilter, RegexFilter, SubstringFilter};
+use filename_filter::{
+    FileNameFilter, FileNameMatch, FuzzyFilter, MatchAllFilter, RegexFilter, SubstringFilter,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "pathsearch", about = "Look for executables in the search path")]
@@ -28,11 +30,16 @@ struct Args {
 }
 
 #[derive(PartialEq, PartialOrd)]
-pub enum SearchType {
+enum SearchType {
     All,
     Substring,
     Regex,
     Fuzzy,
+}
+
+struct MatchedFile {
+    path: PathBuf,
+    matches: FileNameMatch,
 }
 
 struct Config {
@@ -88,7 +95,7 @@ fn main() -> process::ExitCode {
         SearchType::Fuzzy => Box::new(FuzzyFilter::new(&config.search)),
     };
 
-    let mut matched_files: Vec<PathBuf> = Vec::new();
+    let mut matched_files: Vec<MatchedFile> = Vec::new();
 
     for dir in config.dirs {
         let files = match fs::read_dir(&dir) {
@@ -103,8 +110,11 @@ fn main() -> process::ExitCode {
             let file_ref = file.as_ref().unwrap();
             let matched = filename_filter.filter(file_ref);
 
-            if matched && is_executable(file_ref) {
-                matched_files.push(file_ref.path());
+            if matched.is_some() && is_executable(file_ref) {
+                matched_files.push(MatchedFile {
+                    path: file_ref.path(),
+                    matches: matched.unwrap(),
+                });
             }
         }
     }
@@ -117,16 +127,16 @@ fn main() -> process::ExitCode {
         if config.color {
             print_colorized_path(file)
         } else {
-            println!("{}", file.display());
+            println!("{}", file.path.display());
         }
     }
 
     process::ExitCode::SUCCESS
 }
 
-fn sort_files_by_similarity(filename: &str, matched_files: &mut Vec<PathBuf>) {
-    matched_files.sort_by_key(|path| {
-        let file_name = path.file_name().unwrap().to_str();
+fn sort_files_by_similarity(filename: &str, matched_files: &mut Vec<MatchedFile>) {
+    matched_files.sort_by_key(|matched_file| {
+        let file_name = matched_file.path.file_name().unwrap().to_str();
         let similarity = jaro_winkler(file_name.unwrap(), filename);
         // Convert the similarity score to a negative integer for descending order sorting
         (similarity * -1.0 * 1000.0) as i32
@@ -136,23 +146,42 @@ fn sort_files_by_similarity(filename: &str, matched_files: &mut Vec<PathBuf>) {
 fn is_executable(file: &DirEntry) -> bool {
     let metadata = file.metadata().expect("Failed to get metadata for file");
     let permissions = metadata.permissions();
-    permissions.mode() & 0o111 != 0 && metadata.is_file()
+    permissions.mode() & 0o111 != 0 && (metadata.is_file() || metadata.is_symlink())
 }
 
-fn print_colorized_path(path: PathBuf) {
+fn print_colorized_path(file: MatchedFile) {
     // ANSI color codes
     const FG_GREY: &str = "\u{001B}[38;5;240m";
     const FG_WHITE: &str = "\u{001B}[38;5;15m";
     const RESET: &str = "\u{001B}[0m";
 
-    let parent_dir = path.parent().unwrap();
-    let file_name = path.file_name().unwrap();
+    let parent_dir = file.path.parent().unwrap();
+    let file_name = file.path.file_name().unwrap();
 
     let parent_dir_str = parent_dir.to_string_lossy();
-    let file_name_str = file_name.to_string_lossy();
+    let file_name_str = get_colorized_filename(file_name.to_string_lossy().as_ref(), &file);
 
     println!(
         "{}{}/{}{}{}",
         FG_GREY, parent_dir_str, FG_WHITE, file_name_str, RESET
     );
+}
+
+fn get_colorized_filename(filename: &str, matched_file: &MatchedFile) -> String {
+    const FG_RED_BOLD: &str = "\u{001B}[1;31m";
+    const RESET: &str = "\u{001B}[0m";
+
+    match matched_file.matches {
+        FileNameMatch::None => String::from(filename),
+        FileNameMatch::SingleRange((start, end)) => {
+            let mut colored_string = String::new();
+            colored_string.push_str(&filename[..start]);
+            colored_string.push_str(FG_RED_BOLD);
+            colored_string.push_str(&filename[start..end]);
+            colored_string.push_str(RESET);
+            colored_string.push_str(&filename[end..]);
+
+            colored_string
+        }
+    }
 }
