@@ -75,3 +75,11 @@ impl FileNameFilter for RegexFilter {
         }
     }
 }
+
+pub struct MatchAllFilter {}
+
+impl FileNameFilter for MatchAllFilter {
+    fn filter(&self, _file: &DirEntry) -> bool {
+        true
+    }
+}

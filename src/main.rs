@@ -6,7 +6,7 @@ use std::{env, fs, process};
 use strsim::jaro_winkler;
 
 mod filename_filter;
-use filename_filter::{FileNameFilter, FuzzyFilter, RegexFilter, SubstringFilter};
+use filename_filter::{FileNameFilter, FuzzyFilter, MatchAllFilter, RegexFilter, SubstringFilter};
 
 #[derive(Parser, Debug)]
 #[command(name = "pathsearch", about = "Look for executables in the search path")]
@@ -28,7 +28,7 @@ struct Args {
 }
 
 #[derive(PartialEq, PartialOrd)]
-enum SearchType {
+pub enum SearchType {
     All,
     Substring,
     Regex,
@@ -79,14 +79,12 @@ fn main() -> process::ExitCode {
         process::exit(1);
     }
 
-    let mut file_filters: Vec<Box<dyn FileNameFilter>> = Vec::new();
-
-    match config.search_type {
-        SearchType::All => {}
-        SearchType::Substring => file_filters.push(Box::new(SubstringFilter::new(&config.search))),
-        SearchType::Regex => file_filters.push(Box::new(RegexFilter::new(&config.search).unwrap())),
-        SearchType::Fuzzy => file_filters.push(Box::new(FuzzyFilter::new(&config.search))),
-    }
+    let filename_filter: Box<dyn FileNameFilter> = match config.search_type {
+        SearchType::All => Box::new(MatchAllFilter {}),
+        SearchType::Substring => Box::new(SubstringFilter::new(&config.search)),
+        SearchType::Regex => Box::new(RegexFilter::new(&config.search).unwrap()),
+        SearchType::Fuzzy => Box::new(FuzzyFilter::new(&config.search)),
+    };
 
     let mut matched_files: Vec<PathBuf> = Vec::new();
 
@@ -100,12 +98,11 @@ fn main() -> process::ExitCode {
         };
 
         for file in files {
-            let matched = file_filters.iter().fold(true, |result, filter| {
-                result && filter.filter(file.as_ref().unwrap())
-            });
+            let file_ref = file.as_ref().unwrap();
+            let matched = filename_filter.filter(file_ref);
 
-            if matched && is_executable(file.as_ref().unwrap()) {
-                matched_files.push(file.as_ref().unwrap().path());
+            if matched && is_executable(file_ref) {
+                matched_files.push(file_ref.path());
             }
         }
     }
