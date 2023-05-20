@@ -40,6 +40,7 @@ struct Config {
     search: String,
     search_type: SearchType,
     sort: bool,
+    color: bool,
 }
 
 impl Config {
@@ -60,6 +61,7 @@ impl Config {
             search: args.filename.unwrap_or(String::from("undefined")),
             search_type: search_type,
             sort: args.sort,
+            color: true,
         }
     }
 
@@ -112,7 +114,11 @@ fn main() -> process::ExitCode {
     }
 
     for file in matched_files {
-        println!("{}", file.display());
+        if config.color {
+            print_colorized_path(file)
+        } else {
+            println!("{}", file.display());
+        }
     }
 
     process::ExitCode::SUCCESS
@@ -131,4 +137,22 @@ fn is_executable(file: &DirEntry) -> bool {
     let metadata = file.metadata().expect("Failed to get metadata for file");
     let permissions = metadata.permissions();
     permissions.mode() & 0o111 != 0 && metadata.is_file()
+}
+
+fn print_colorized_path(path: PathBuf) {
+    // ANSI color codes
+    const FG_GREY: &str = "\u{001B}[38;5;240m";
+    const FG_WHITE: &str = "\u{001B}[38;5;15m";
+    const RESET: &str = "\u{001B}[0m";
+
+    let parent_dir = path.parent().unwrap();
+    let file_name = path.file_name().unwrap();
+
+    let parent_dir_str = parent_dir.to_string_lossy();
+    let file_name_str = file_name.to_string_lossy();
+
+    println!(
+        "{}{}/{}{}{}",
+        FG_GREY, parent_dir_str, FG_WHITE, file_name_str, RESET
+    );
 }
