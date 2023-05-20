@@ -123,8 +123,9 @@ fn main() -> process::ExitCode {
 
 fn sort_files_by_similarity(filename: &str, matched_files: &mut Vec<PathBuf>) {
     matched_files.sort_by_key(|path| {
-        let file_name = path.file_name().unwrap().to_string_lossy();
-        let similarity = jaro_winkler(file_name.as_ref(), filename);
+        let file_name = path.file_name().unwrap().to_str();
+        let similarity = jaro_winkler(file_name.unwrap(), filename);
+        // Convert the similarity score to a negative integer for descending order sorting
         (similarity * -1.0 * 1000.0) as i32
     });
 }
