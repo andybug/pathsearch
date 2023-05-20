@@ -3,7 +3,7 @@ use fuzzy_matcher::FuzzyMatcher;
 use regex::Regex;
 use std::fs::DirEntry;
 
-pub trait FileFilter {
+pub trait FileNameFilter {
     fn filter(&self, file: &DirEntry) -> bool;
 }
 
@@ -19,7 +19,7 @@ impl SubstringFilter {
     }
 }
 
-impl FileFilter for SubstringFilter {
+impl FileNameFilter for SubstringFilter {
     fn filter(&self, file: &DirEntry) -> bool {
         if let Some(file_name) = file.file_name().to_str() {
             return file_name.contains(&self.pattern);
@@ -42,7 +42,7 @@ impl FuzzyFilter {
     }
 }
 
-impl FileFilter for FuzzyFilter {
+impl FileNameFilter for FuzzyFilter {
     fn filter(&self, file: &DirEntry) -> bool {
         let file_name = file.file_name();
         if let Some(file_name_str) = file_name.to_str() {
@@ -66,7 +66,7 @@ impl RegexFilter {
     }
 }
 
-impl FileFilter for RegexFilter {
+impl FileNameFilter for RegexFilter {
     fn filter(&self, file: &DirEntry) -> bool {
         if let Some(file_name) = file.file_name().to_str() {
             self.regex.is_match(file_name)

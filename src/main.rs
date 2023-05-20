@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::{env, fs, process};
 use strsim::jaro_winkler;
 
-mod file_filter;
-use file_filter::{FileFilter, FuzzyFilter, RegexFilter, SubstringFilter};
+mod filename_filter;
+use filename_filter::{FileNameFilter, FuzzyFilter, RegexFilter, SubstringFilter};
 
 #[derive(Parser, Debug)]
 #[command(name = "pathsearch", about = "Look for executables in the search path")]
@@ -79,7 +79,7 @@ fn main() -> process::ExitCode {
         process::exit(1);
     }
 
-    let mut file_filters: Vec<Box<dyn FileFilter>> = Vec::new();
+    let mut file_filters: Vec<Box<dyn FileNameFilter>> = Vec::new();
 
     match config.search_type {
         SearchType::All => {}
