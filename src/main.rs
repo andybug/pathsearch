@@ -215,3 +215,39 @@ fn get_colorized_filename(filename: &str, matched_file: &MatchedFile) -> String 
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sort_files_by_similarity() {
+        let filename = "example";
+        let mut matched_files = vec![
+            MatchedFile {
+                path: PathBuf::from("file1.txt"),
+                matches: FileNameMatch::None,
+            },
+            MatchedFile {
+                path: PathBuf::from("test-example.txt"),
+                matches: FileNameMatch::None,
+            },
+            MatchedFile {
+                /* cspell:disable-next-line */
+                path: PathBuf::from("examlpe.txt"),
+                matches: FileNameMatch::None,
+            },
+        ];
+
+        sort_files_by_similarity(filename, &mut matched_files);
+
+        // Check if the files are sorted in descending order of similarity
+        let mut prev_similarity = f64::MAX;
+        for matched_file in matched_files {
+            let file_name = matched_file.path.file_name().unwrap().to_str().unwrap();
+            let similarity = jaro_winkler(file_name, filename);
+            assert!(similarity <= prev_similarity);
+            prev_similarity = similarity;
+        }
+    }
+}
