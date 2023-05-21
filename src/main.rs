@@ -1,4 +1,5 @@
 use clap::{Parser, ValueEnum};
+use std::io::{self, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs, process};
@@ -172,7 +173,8 @@ fn main() -> process::ExitCode {
 
     for file in matched_files {
         if config.color {
-            print_colorized_path(file)
+            let output = io::stdout();
+            print_colorized_path(file, &mut output.lock())
         } else {
             println!("{}", file.path.display());
         }
@@ -194,7 +196,7 @@ fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
     mode & 0o111 != 0 && (is_file || is_symlink)
 }
 
-fn print_colorized_path(file: MatchedFile) {
+fn print_colorized_path<W: Write>(file: MatchedFile, output: &mut W) {
     // ANSI color codes
     const FG_GREY: &str = "\u{001B}[38;5;240m";
     const FG_WHITE: &str = "\u{001B}[38;5;15m";
@@ -206,10 +208,12 @@ fn print_colorized_path(file: MatchedFile) {
     let parent_dir_str = parent_dir.to_string_lossy();
     let file_name_str = get_colorized_filename(file_name.to_string_lossy().as_ref(), &file);
 
-    println!(
+    writeln!(
+        output,
         "{}{}/{}{}{}",
         FG_GREY, parent_dir_str, FG_WHITE, file_name_str, RESET
-    );
+    )
+    .unwrap();
 }
 
 fn get_colorized_filename(filename: &str, matched_file: &MatchedFile) -> String {
@@ -234,6 +238,7 @@ fn get_colorized_filename(filename: &str, matched_file: &MatchedFile) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_sort_files_by_similarity() {
@@ -304,5 +309,85 @@ mod tests {
         let is_symlink = true;
 
         assert_eq!(is_executable(mode, is_file, is_symlink), false);
+    }
+
+    const FG_GREY: &str = "\u{001B}[38;5;240m";
+    const FG_RED_BOLD: &str = "\u{001B}[1;31m";
+    const FG_WHITE: &str = "\u{001B}[38;5;15m";
+    const RESET: &str = "\u{001B}[0m";
+
+    #[test]
+    fn test_print_colorized_path() {
+        let matched_file = MatchedFile {
+            path: PathBuf::from("/path/to/file.txt"),
+            matches: FileNameMatch::None,
+        };
+
+        let mut output = Cursor::new(Vec::new());
+
+        print_colorized_path(matched_file, &mut output);
+
+        let output_str = String::from_utf8(output.into_inner()).unwrap();
+        let expected_output = format!(
+            "{}{}/{}{}{}\n",
+            FG_GREY, "/path/to", FG_WHITE, "file.txt", RESET
+        );
+        assert_eq!(output_str, expected_output);
+    }
+
+    #[test]
+    fn test_print_colorized_path_highlight() {
+        let matched_file = MatchedFile {
+            path: PathBuf::from("/path/to/file.txt"),
+            matches: FileNameMatch::SingleRange((2, 4)),
+        };
+
+        let mut output = Cursor::new(Vec::new());
+
+        print_colorized_path(matched_file, &mut output);
+
+        let output_str = String::from_utf8(output.into_inner()).unwrap();
+        let mut expected_output = String::new();
+        expected_output.push_str(FG_GREY);
+        expected_output.push_str("/path/to/");
+        expected_output.push_str(FG_WHITE);
+        expected_output.push_str("fi");
+        expected_output.push_str(FG_RED_BOLD);
+        expected_output.push_str("le");
+        expected_output.push_str(RESET);
+        expected_output.push_str(".txt");
+        expected_output.push_str(RESET);
+        expected_output.push('\n');
+
+        assert_eq!(output_str, expected_output);
+    }
+
+    #[test]
+    fn test_get_colorized_filename_none_match() {
+        let filename = "example.txt";
+        let matched_file = MatchedFile {
+            path: PathBuf::new(),
+            matches: FileNameMatch::None,
+        };
+
+        let result = get_colorized_filename(filename, &matched_file);
+
+        assert_eq!(result, String::from(filename));
+    }
+
+    #[test]
+    fn test_get_colorized_filename_single_range_match() {
+        let filename = "example.txt";
+        let matched_file = MatchedFile {
+            path: PathBuf::new(),
+            matches: FileNameMatch::SingleRange((2, 6)),
+        };
+
+        let result = get_colorized_filename(filename, &matched_file);
+
+        /* cspell:disable-next-line */
+        let expected_output = format!("ex{}ampl{}e.txt", FG_RED_BOLD, RESET);
+
+        assert_eq!(result, expected_output);
     }
 }
