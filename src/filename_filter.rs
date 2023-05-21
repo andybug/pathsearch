@@ -9,7 +9,7 @@ pub enum FileNameMatch {
 }
 
 pub trait FileNameFilter {
-    fn filter(&self, file_name: &str) -> Option<FileNameMatch>;
+    fn filter(&self, filename: &str) -> Option<FileNameMatch>;
 }
 
 pub struct SubstringFilter {
@@ -25,8 +25,8 @@ impl SubstringFilter {
 }
 
 impl FileNameFilter for SubstringFilter {
-    fn filter(&self, file_name: &str) -> Option<FileNameMatch> {
-        if let Some(index) = file_name.find(&self.pattern) {
+    fn filter(&self, filename: &str) -> Option<FileNameMatch> {
+        if let Some(index) = filename.find(&self.pattern) {
             return Some(FileNameMatch::SingleRange((
                 index,
                 index + self.pattern.len(),
@@ -51,8 +51,8 @@ impl FuzzyFilter {
 }
 
 impl FileNameFilter for FuzzyFilter {
-    fn filter(&self, file_name: &str) -> Option<FileNameMatch> {
-        match self.skim_matcher.fuzzy_match(file_name, &self.pattern) {
+    fn filter(&self, filename: &str) -> Option<FileNameMatch> {
+        match self.skim_matcher.fuzzy_match(filename, &self.pattern) {
             Some(_score) => return Some(FileNameMatch::None),
             None => return None,
         }
@@ -74,8 +74,8 @@ impl RegexFilter {
 }
 
 impl FileNameFilter for RegexFilter {
-    fn filter(&self, file_name: &str) -> Option<FileNameMatch> {
-        match self.regex.find(file_name) {
+    fn filter(&self, filename: &str) -> Option<FileNameMatch> {
+        match self.regex.find(filename) {
             Some(first_match) => {
                 return Some(FileNameMatch::SingleRange((
                     first_match.start(),
@@ -90,7 +90,7 @@ impl FileNameFilter for RegexFilter {
 pub struct MatchAllFilter {}
 
 impl FileNameFilter for MatchAllFilter {
-    fn filter(&self, _file_name: &str) -> Option<FileNameMatch> {
+    fn filter(&self, _filename: &str) -> Option<FileNameMatch> {
         Some(FileNameMatch::None)
     }
 }
