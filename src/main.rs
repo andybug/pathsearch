@@ -126,8 +126,19 @@ fn main() -> process::ExitCode {
         };
 
         for file in files {
-            let file_ref = file.as_ref().unwrap();
-            let matched = filename_filter.filter(file_ref);
+            let file_ref = match file.as_ref() {
+                Ok(dir_entry) => dir_entry,
+                Err(err) => {
+                    eprintln!(
+                        "Failed to get directory entry in '{}': {}",
+                        dir.display(),
+                        err
+                    );
+                    continue;
+                }
+            };
+            let file_name = String::from(file_ref.file_name().to_string_lossy());
+            let matched = filename_filter.filter(&file_name);
 
             if matched.is_some() && is_executable(file_ref) {
                 matched_files.push(MatchedFile {
