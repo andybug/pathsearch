@@ -1,5 +1,4 @@
 use clap::{Parser, ValueEnum};
-use std::fs::DirEntry;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs, process};
@@ -140,7 +139,25 @@ fn main() -> process::ExitCode {
             let file_name = String::from(file_ref.file_name().to_string_lossy());
             let matched = filename_filter.filter(&file_name);
 
-            if matched.is_some() && is_executable(file_ref) {
+            let metadata = match file_ref.metadata() {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    eprintln!(
+                        "Failed to get file metadata for '{}': {}",
+                        file_ref.path().display(),
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            if matched.is_some()
+                && is_executable(
+                    metadata.permissions().mode(),
+                    metadata.is_file(),
+                    metadata.is_symlink(),
+                )
+            {
                 matched_files.push(MatchedFile {
                     path: file_ref.path(),
                     matches: matched.unwrap(),
@@ -173,10 +190,8 @@ fn sort_files_by_similarity(filename: &str, matched_files: &mut Vec<MatchedFile>
     });
 }
 
-fn is_executable(file: &DirEntry) -> bool {
-    let metadata = file.metadata().expect("Failed to get metadata for file");
-    let permissions = metadata.permissions();
-    permissions.mode() & 0o111 != 0 && (metadata.is_file() || metadata.is_symlink())
+fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
+    mode & 0o111 != 0 && (is_file || is_symlink)
 }
 
 fn print_colorized_path(file: MatchedFile) {
@@ -249,5 +264,45 @@ mod tests {
             assert!(similarity <= prev_similarity);
             prev_similarity = similarity;
         }
+    }
+
+    #[test]
+    fn test_is_executable_file() {
+        // Test when mode is executable, and it's a regular file
+        let mode = 0o755;
+        let is_file = true;
+        let is_symlink = false;
+
+        assert_eq!(is_executable(mode, is_file, is_symlink), true);
+    }
+
+    #[test]
+    fn test_is_executable_symlink() {
+        // Test when mode is executable, and it's a symbolic link
+        let mode = 0o777;
+        let is_file = false;
+        let is_symlink = true;
+
+        assert_eq!(is_executable(mode, is_file, is_symlink), true);
+    }
+
+    #[test]
+    fn test_is_not_executable_file() {
+        // Test when mode is not executable, and it's a regular file
+        let mode = 0o644;
+        let is_file = true;
+        let is_symlink = false;
+
+        assert_eq!(is_executable(mode, is_file, is_symlink), false);
+    }
+
+    #[test]
+    fn test_is_not_executable_symlink() {
+        // Test when mode is not executable, and it's a symbolic link
+        let mode = 0o600;
+        let is_file = false;
+        let is_symlink = true;
+
+        assert_eq!(is_executable(mode, is_file, is_symlink), false);
     }
 }
