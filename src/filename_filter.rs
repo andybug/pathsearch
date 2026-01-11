@@ -55,7 +55,7 @@ impl FileNameFilter for RegexFilter {
                 return Some(FileNameMatch::SingleRange((
                     first_match.start(),
                     first_match.end(),
-                )))
+                )));
             }
             None => return None,
         }
