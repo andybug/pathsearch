@@ -77,14 +77,14 @@ impl Args {
                 "-h" | "--help" => {
                     print_help();
                     process::exit(0);
-                },
+                }
                 "-V" | "--version" => {
                     println!("pathsearch {}", env!("CARGO_PKG_VERSION"));
                     process::exit(0);
-                },
+                }
                 s if s.starts_with("-") => {
                     return Err(format!("Unknown option: {}", s));
-                },
+                }
                 s => {
                     if pattern.is_some() {
                         return Err("Multiple patterns provided".to_string());
@@ -197,7 +197,7 @@ fn main() -> process::ExitCode {
     process::ExitCode::SUCCESS
 }
 
-fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
+const fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
     mode & 0o111 != 0 && (is_file || is_symlink)
 }
 
