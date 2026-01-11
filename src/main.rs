@@ -1,54 +1,20 @@
-use clap::{Parser, ValueEnum};
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs, process};
-use strsim::jaro_winkler;
 
 mod filename_filter;
-use filename_filter::{
-    FileNameFilter, FileNameMatch, FuzzyFilter, MatchAllFilter, RegexFilter, SubstringFilter,
-};
+use filename_filter::{FileNameFilter, FileNameMatch, RegexFilter, SubstringFilter};
 
-#[derive(Parser, Debug)]
-#[command(name = "pathsearch", about = "Look for executables in the search path")]
-#[command(version = "0.1")]
 struct Args {
-    #[arg(name = "filename", index = 1, help = "Search query")]
     filename: Option<String>,
-    #[arg(short, long, default_value = "false", help = "Use regex matching")]
     regex: bool,
-    #[arg(short, long, default_value = "false", help = "Use fuzzy matching")]
-    fuzzy: bool,
-    #[arg(
-        short,
-        long,
-        default_value = "false",
-        help = "Sort files by similarity to search"
-    )]
-    sort: bool,
-    #[clap(
-        long,
-        value_enum,
-        default_value = "auto",
-        help = "Choose whether to emit color output"
-    )]
-    color: ColorOption,
-}
-
-#[derive(ValueEnum, Clone, Debug)]
-enum ColorOption {
-    Auto,
-    Always,
-    Never,
 }
 
 #[derive(PartialEq, PartialOrd)]
 enum SearchType {
-    All,
     Substring,
     Regex,
-    Fuzzy,
 }
 
 struct MatchedFile {
@@ -60,34 +26,31 @@ struct Config {
     dirs: Vec<PathBuf>,
     search: String,
     search_type: SearchType,
-    sort: bool,
-    color: bool,
 }
 
 impl Config {
     fn new() -> Config {
-        let args = Args::parse();
+        let args = match Args::parse_manual() {
+            Ok(args) => args,
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                eprintln!();
+                print_help();
+                process::exit(1);
+            }
+        };
         let path = env::var("PATH").expect("Failed to get PATH");
         let dirs = env::split_paths(&path).collect();
-        let search_type = match (args.filename.is_some(), args.regex, args.fuzzy) {
-            (false, _, _) => SearchType::All,
-            (true, false, false) => SearchType::Substring,
-            (true, true, false) => SearchType::Regex,
-            (true, false, true) => SearchType::Fuzzy,
-            (true, true, true) => SearchType::Substring, // TODO: print warning here?
-        };
-        let color = match args.color {
-            ColorOption::Always => true,
-            ColorOption::Never => false,
-            ColorOption::Auto => atty::is(atty::Stream::Stdout),
+        let search_type = if args.regex {
+            SearchType::Regex
+        } else {
+            SearchType::Substring
         };
 
         Config {
             dirs: dirs,
             search: args.filename.unwrap_or(String::from("undefined")),
             search_type: search_type,
-            sort: args.sort,
-            color: color,
         }
     }
 
@@ -101,6 +64,62 @@ impl Config {
     }
 }
 
+// Manual argument parser (replaces clap)
+impl Args {
+    fn parse_manual() -> Result<Args, String> {
+        let mut args_iter = env::args().skip(1);
+        let mut pattern = None;
+        let mut regex = false;
+
+        while let Some(arg) = args_iter.next() {
+            match arg.as_str() {
+                "-r" | "--regex" => regex = true,
+                "-h" | "--help" => {
+                    print_help();
+                    process::exit(0);
+                },
+                "-V" | "--version" => {
+                    println!("pathsearch {}", env!("CARGO_PKG_VERSION"));
+                    process::exit(0);
+                },
+                s if s.starts_with("-") => {
+                    return Err(format!("Unknown option: {}", s));
+                },
+                s => {
+                    if pattern.is_some() {
+                        return Err("Multiple patterns provided".to_string());
+                    }
+                    pattern = Some(s.to_string());
+                }
+            }
+        }
+
+        match pattern {
+            Some(p) => Ok(Args {
+                filename: Some(p),
+                regex,
+            }),
+            None => Err("Missing required argument: <pattern>".to_string()),
+        }
+    }
+}
+
+fn print_help() {
+    println!("pathsearch {}", env!("CARGO_PKG_VERSION"));
+    println!("Look for executables in the search path");
+    println!();
+    println!("USAGE:");
+    println!("    pathsearch [OPTIONS] <pattern>");
+    println!();
+    println!("ARGUMENTS:");
+    println!("    <pattern>    Search pattern (substring, or regex with -r)");
+    println!();
+    println!("OPTIONS:");
+    println!("    -r, --regex    Interpret pattern as regex");
+    println!("    -h, --help     Print help");
+    println!("    -V, --version  Print version");
+}
+
 fn main() -> process::ExitCode {
     let config = Config::new();
     if !config.validate() {
@@ -108,10 +127,8 @@ fn main() -> process::ExitCode {
     }
 
     let filename_filter: Box<dyn FileNameFilter> = match config.search_type {
-        SearchType::All => Box::new(MatchAllFilter {}),
         SearchType::Substring => Box::new(SubstringFilter::new(&config.search)),
         SearchType::Regex => Box::new(RegexFilter::new(&config.search).unwrap()),
-        SearchType::Fuzzy => Box::new(FuzzyFilter::new(&config.search)),
     };
 
     let mut matched_files: Vec<MatchedFile> = Vec::new();
@@ -167,12 +184,9 @@ fn main() -> process::ExitCode {
         }
     }
 
-    if config.sort && (config.search_type == SearchType::Substring) {
-        sort_files_by_similarity(&config.search, &mut matched_files);
-    }
-
+    let use_color = io::stdout().is_terminal();
     for file in matched_files {
-        if config.color {
+        if use_color {
             let output = io::stdout();
             print_colorized_path(file, &mut output.lock())
         } else {
@@ -181,15 +195,6 @@ fn main() -> process::ExitCode {
     }
 
     process::ExitCode::SUCCESS
-}
-
-fn sort_files_by_similarity(filename: &str, matched_files: &mut Vec<MatchedFile>) {
-    matched_files.sort_by_key(|matched_file| {
-        let file_name = matched_file.path.file_name().unwrap().to_str();
-        let similarity = jaro_winkler(file_name.unwrap(), filename);
-        // Convert the similarity score to a negative integer for descending order sorting
-        (similarity * -1.0 * 1000.0) as i32
-    });
 }
 
 fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
@@ -239,37 +244,6 @@ fn get_colorized_filename(filename: &str, matched_file: &MatchedFile) -> String 
 mod tests {
     use super::*;
     use std::io::Cursor;
-
-    #[test]
-    fn test_sort_files_by_similarity() {
-        let filename = "example";
-        let mut matched_files = vec![
-            MatchedFile {
-                path: PathBuf::from("file1.txt"),
-                matches: FileNameMatch::None,
-            },
-            MatchedFile {
-                path: PathBuf::from("test-example.txt"),
-                matches: FileNameMatch::None,
-            },
-            MatchedFile {
-                /* cspell:disable-next-line */
-                path: PathBuf::from("examlpe.txt"),
-                matches: FileNameMatch::None,
-            },
-        ];
-
-        sort_files_by_similarity(filename, &mut matched_files);
-
-        // Check if the files are sorted in descending order of similarity
-        let mut prev_similarity = f64::MAX;
-        for matched_file in matched_files {
-            let file_name = matched_file.path.file_name().unwrap().to_str().unwrap();
-            let similarity = jaro_winkler(file_name, filename);
-            assert!(similarity <= prev_similarity);
-            prev_similarity = similarity;
-        }
-    }
 
     #[test]
     fn test_is_executable_file() {
