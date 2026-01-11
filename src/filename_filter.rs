@@ -1,5 +1,3 @@
-use fuzzy_matcher::skim::SkimMatcherV2;
-use fuzzy_matcher::FuzzyMatcher;
 use regex::Regex;
 
 #[derive(Debug, PartialEq)]
@@ -36,29 +34,6 @@ impl FileNameFilter for SubstringFilter {
     }
 }
 
-pub struct FuzzyFilter {
-    pattern: String,
-    skim_matcher: SkimMatcherV2,
-}
-
-impl FuzzyFilter {
-    pub fn new(pattern: &str) -> FuzzyFilter {
-        FuzzyFilter {
-            pattern: String::from(pattern),
-            skim_matcher: SkimMatcherV2::default(),
-        }
-    }
-}
-
-impl FileNameFilter for FuzzyFilter {
-    fn filter(&self, filename: &str) -> Option<FileNameMatch> {
-        match self.skim_matcher.fuzzy_match(filename, &self.pattern) {
-            Some(_score) => return Some(FileNameMatch::None),
-            None => return None,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct RegexFilter {
     regex: Regex,
@@ -84,14 +59,6 @@ impl FileNameFilter for RegexFilter {
             }
             None => return None,
         }
-    }
-}
-
-pub struct MatchAllFilter {}
-
-impl FileNameFilter for MatchAllFilter {
-    fn filter(&self, _filename: &str) -> Option<FileNameMatch> {
-        Some(FileNameMatch::None)
     }
 }
 
@@ -123,20 +90,6 @@ mod tests {
     }
 
     #[test]
-    fn fuzzy_filter_returns_none_when_no_match() {
-        let filter = FuzzyFilter::new("abc");
-        let result = filter.filter("def");
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn fuzzy_filter_returns_none_when_match_found() {
-        let filter = FuzzyFilter::new("abc");
-        let result = filter.filter("abracadabra");
-        assert_eq!(result, Some(FileNameMatch::None));
-    }
-
-    #[test]
     fn regex_filter_returns_none_when_no_match() {
         let filter = RegexFilter::new(r"\d+").unwrap();
         let result = filter.filter("abc");
@@ -161,13 +114,5 @@ mod tests {
     fn regex_filter_returns_error_when_invalid_pattern() {
         let filter = RegexFilter::new(r"(").unwrap_err();
         assert_eq!(filter.to_string().contains("regex parse error"), true);
-    }
-
-    #[test]
-    fn match_all_filter() {
-        let ma_filter = MatchAllFilter {};
-        let m = ma_filter.filter("");
-        assert_eq!(m.is_some(), true);
-        assert_eq!(m.unwrap(), FileNameMatch::None);
     }
 }
