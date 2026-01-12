@@ -1,4 +1,5 @@
 use std::io::{self, IsTerminal, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs, process};
@@ -154,8 +155,8 @@ fn main() -> process::ExitCode {
                     continue;
                 }
             };
-            let file_name = String::from(file_ref.file_name().to_string_lossy());
-            let matched = filename_filter.filter(&file_name);
+            let file_name = file_ref.file_name();
+            let matched = filename_filter.filter(file_name.as_bytes());
 
             let metadata = match file_ref.metadata() {
                 Ok(metadata) => metadata,
