@@ -1,4 +1,4 @@
-use regex::Regex;
+use regex::bytes::Regex;
 
 #[derive(Debug, PartialEq)]
 pub enum FileNameMatch {
@@ -7,30 +7,27 @@ pub enum FileNameMatch {
 }
 
 pub trait FileNameFilter {
-    fn filter(&self, filename: &str) -> Option<FileNameMatch>;
+    fn filter(&self, filename: &[u8]) -> Option<FileNameMatch>;
 }
 
 pub struct SubstringFilter {
-    pattern: String,
+    pattern: Vec<u8>,
 }
 
 impl SubstringFilter {
     pub fn new(pattern: &str) -> Self {
         SubstringFilter {
-            pattern: pattern.to_owned(),
+            pattern: pattern.as_bytes().to_vec(),
         }
     }
 }
 
 impl FileNameFilter for SubstringFilter {
-    fn filter(&self, filename: &str) -> Option<FileNameMatch> {
-        if let Some(index) = filename.find(&self.pattern) {
-            return Some(FileNameMatch::SingleRange((
-                index,
-                index + self.pattern.len(),
-            )));
-        }
-        None
+    fn filter(&self, filename: &[u8]) -> Option<FileNameMatch> {
+        filename
+            .windows(self.pattern.len())
+            .position(|window| window == self.pattern.as_slice())
+            .map(|start| FileNameMatch::SingleRange((start, start + self.pattern.len())))
     }
 }
 
@@ -49,16 +46,10 @@ impl RegexFilter {
 }
 
 impl FileNameFilter for RegexFilter {
-    fn filter(&self, filename: &str) -> Option<FileNameMatch> {
-        match self.regex.find(filename) {
-            Some(first_match) => {
-                return Some(FileNameMatch::SingleRange((
-                    first_match.start(),
-                    first_match.end(),
-                )));
-            }
-            None => return None,
-        }
+    fn filter(&self, filename: &[u8]) -> Option<FileNameMatch> {
+        self.regex
+            .find(filename)
+            .map(|m| FileNameMatch::SingleRange((m.start(), m.end())))
     }
 }
 
@@ -69,7 +60,7 @@ mod tests {
     #[test]
     fn substring_filter_returns_none_when_no_match() {
         let filter = SubstringFilter::new("abc");
-        let result = filter.filter("def");
+        let result = filter.filter(b"def");
         assert_eq!(result, None);
     }
 
@@ -77,7 +68,7 @@ mod tests {
     fn substring_filter_returns_match_range_when_pattern_found() {
         let filter = SubstringFilter::new("abc");
         /* cspell:disable-next-line */
-        let result = filter.filter("xyzabc123");
+        let result = filter.filter(b"xyzabc123");
         assert_eq!(result, Some(FileNameMatch::SingleRange((3, 6))));
     }
 
@@ -85,28 +76,28 @@ mod tests {
     fn substring_filter_returns_first_match_range_when_multiple_patterns_found() {
         let filter = SubstringFilter::new("abc");
         /* cspell:disable-next-line */
-        let result = filter.filter("xyzabc123abc");
+        let result = filter.filter(b"xyzabc123abc");
         assert_eq!(result, Some(FileNameMatch::SingleRange((3, 6))));
     }
 
     #[test]
     fn regex_filter_returns_none_when_no_match() {
         let filter = RegexFilter::new(r"\d+").unwrap();
-        let result = filter.filter("abc");
+        let result = filter.filter(b"abc");
         assert_eq!(result, None);
     }
 
     #[test]
     fn regex_filter_returns_match_range_when_pattern_found() {
         let filter = RegexFilter::new(r"\d+").unwrap();
-        let result = filter.filter("abc123def");
+        let result = filter.filter(b"abc123def");
         assert_eq!(result, Some(FileNameMatch::SingleRange((3, 6))));
     }
 
     #[test]
     fn regex_filter_returns_first_match_range_when_multiple_patterns_found() {
         let filter = RegexFilter::new(r"\d+").unwrap();
-        let result = filter.filter("abc123def456");
+        let result = filter.filter(b"abc123def456");
         assert_eq!(result, Some(FileNameMatch::SingleRange((3, 6))));
     }
 
