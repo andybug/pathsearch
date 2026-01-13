@@ -5,3 +5,8 @@ edition = "2024"
 
 [dependencies]
 regex = { version = "1", default-features = false, features = ["std", "unicode-perl"] }
+
+[profile.release]
+lto = true
+opt-level = "z"
+strip = true
