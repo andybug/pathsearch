@@ -204,8 +204,7 @@ const fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
 
 fn print_colorized_path<W: Write>(file: MatchedFile, output: &mut W) {
     // ANSI color codes
-    const FG_GREY: &str = "\u{001B}[38;5;240m";
-    const FG_WHITE: &str = "\u{001B}[38;5;15m";
+    const FG_GREY: &str = "\u{001B}[38;5;250m";
     const RESET: &str = "\u{001B}[0m";
 
     let parent_dir = file.path.parent().unwrap();
@@ -217,7 +216,7 @@ fn print_colorized_path<W: Write>(file: MatchedFile, output: &mut W) {
     writeln!(
         output,
         "{}{}/{}{}{}",
-        FG_GREY, parent_dir_str, FG_WHITE, file_name_str, RESET
+        FG_GREY, parent_dir_str, RESET, file_name_str, RESET
     )
     .unwrap();
 }
