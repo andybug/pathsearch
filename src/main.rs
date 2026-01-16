@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::{env, fs, process};
 
 mod filename_filter;
-use filename_filter::{FileNameFilter, FileNameMatch, RegexFilter, SubstringFilter};
+use filename_filter::{FileNameFilter, FilterResult, MatchRange, RegexFilter, SubstringFilter};
 
 struct Args {
     pattern: Option<String>,
@@ -20,7 +20,7 @@ enum SearchType {
 
 struct MatchedFile {
     path: PathBuf,
-    matches: FileNameMatch,
+    matches: MatchRange,
 }
 
 struct Config {
@@ -156,31 +156,31 @@ fn main() -> process::ExitCode {
                 }
             };
             let file_name = file_ref.file_name();
-            let matched = filename_filter.filter(file_name.as_bytes());
+            let filter_result = filename_filter.filter(file_name.as_bytes());
 
-            let metadata = match file_ref.metadata() {
-                Ok(metadata) => metadata,
-                Err(err) => {
-                    eprintln!(
-                        "Failed to get file metadata for '{}': {}",
-                        file_ref.path().display(),
-                        err
-                    );
-                    continue;
-                }
-            };
+            if let FilterResult::Matched(match_range) = filter_result {
+                let metadata = match file_ref.metadata() {
+                    Ok(metadata) => metadata,
+                    Err(err) => {
+                        eprintln!(
+                            "Failed to get file metadata for '{}': {}",
+                            file_ref.path().display(),
+                            err
+                        );
+                        continue;
+                    }
+                };
 
-            if matched.is_some()
-                && is_executable(
+                if is_executable(
                     metadata.permissions().mode(),
                     metadata.is_file(),
                     metadata.is_symlink(),
-                )
-            {
-                matched_files.push(MatchedFile {
-                    path: file_ref.path(),
-                    matches: matched.unwrap(),
-                });
+                ) {
+                    matched_files.push(MatchedFile {
+                        path: file_ref.path(),
+                        matches: match_range,
+                    });
+                }
             }
         }
     }
@@ -226,8 +226,8 @@ fn get_colorized_filename(filename: &str, matched_file: &MatchedFile) -> String 
     const RESET: &str = "\u{001B}[0m";
 
     match matched_file.matches {
-        FileNameMatch::None => String::from(filename),
-        FileNameMatch::SingleRange((start, end)) => {
+        MatchRange::None => String::from(filename),
+        MatchRange::Range(start, end) => {
             let mut colored_string = String::new();
             colored_string.push_str(&filename[..start]);
             colored_string.push_str(FG_RED_BOLD);
@@ -294,7 +294,7 @@ mod tests {
     fn test_print_colorized_path() {
         let matched_file = MatchedFile {
             path: PathBuf::from("/path/to/file.txt"),
-            matches: FileNameMatch::None,
+            matches: MatchRange::None,
         };
 
         let mut output = Cursor::new(Vec::new());
@@ -313,7 +313,7 @@ mod tests {
     fn test_print_colorized_path_highlight() {
         let matched_file = MatchedFile {
             path: PathBuf::from("/path/to/file.txt"),
-            matches: FileNameMatch::SingleRange((2, 4)),
+            matches: MatchRange::Range(2, 4),
         };
 
         let mut output = Cursor::new(Vec::new());
@@ -341,7 +341,7 @@ mod tests {
         let filename = "example.txt";
         let matched_file = MatchedFile {
             path: PathBuf::new(),
-            matches: FileNameMatch::None,
+            matches: MatchRange::None,
         };
 
         let result = get_colorized_filename(filename, &matched_file);
@@ -354,7 +354,7 @@ mod tests {
         let filename = "example.txt";
         let matched_file = MatchedFile {
             path: PathBuf::new(),
-            matches: FileNameMatch::SingleRange((2, 6)),
+            matches: MatchRange::Range(2, 6),
         };
 
         let result = get_colorized_filename(filename, &matched_file);
