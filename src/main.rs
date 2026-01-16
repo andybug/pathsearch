@@ -8,7 +8,7 @@ mod filename_filter;
 use filename_filter::{FileNameFilter, FileNameMatch, RegexFilter, SubstringFilter};
 
 struct Args {
-    filename: Option<String>,
+    pattern: Option<String>,
     regex: bool,
 }
 
@@ -25,7 +25,7 @@ struct MatchedFile {
 
 struct Config {
     dirs: Vec<PathBuf>,
-    search: String,
+    pattern: String,
     search_type: SearchType,
 }
 
@@ -50,7 +50,7 @@ impl Config {
 
         Config {
             dirs: dirs,
-            search: args.filename.unwrap_or(String::from("undefined")),
+            pattern: args.pattern.unwrap_or(String::from("undefined")),
             search_type: search_type,
         }
     }
@@ -97,7 +97,7 @@ impl Args {
 
         match pattern {
             Some(p) => Ok(Args {
-                filename: Some(p),
+                pattern: Some(p),
                 regex,
             }),
             None => Err("Missing required argument: <pattern>".to_string()),
@@ -128,8 +128,8 @@ fn main() -> process::ExitCode {
     }
 
     let filename_filter: Box<dyn FileNameFilter> = match config.search_type {
-        SearchType::Substring => Box::new(SubstringFilter::new(&config.search)),
-        SearchType::Regex => Box::new(RegexFilter::new(&config.search).unwrap()),
+        SearchType::Substring => Box::new(SubstringFilter::new(&config.pattern)),
+        SearchType::Regex => Box::new(RegexFilter::new(&config.pattern).unwrap()),
     };
 
     let mut matched_files: Vec<MatchedFile> = Vec::new();
