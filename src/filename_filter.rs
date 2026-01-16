@@ -16,6 +16,15 @@ pub trait FileNameFilter {
     fn filter(&self, filename: &[u8]) -> FilterResult;
 }
 
+#[derive(Default)]
+pub struct MatchAllFilter {}
+
+impl FileNameFilter for MatchAllFilter {
+    fn filter(&self, _filename: &[u8]) -> FilterResult {
+        FilterResult::Matched(MatchRange::None)
+    }
+}
+
 pub struct SubstringFilter {
     pattern: Vec<u8>,
 }

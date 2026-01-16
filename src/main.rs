@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use std::{env, fs, process};
 
 mod filename_filter;
-use filename_filter::{FileNameFilter, FilterResult, MatchRange, RegexFilter, SubstringFilter};
+use filename_filter::{
+    FileNameFilter, FilterResult, MatchAllFilter, MatchRange, RegexFilter, SubstringFilter,
+};
 
 struct Args {
     pattern: Option<String>,
@@ -14,6 +16,8 @@ struct Args {
 
 #[derive(PartialEq, PartialOrd)]
 enum SearchType {
+    /// Match all files on path if no pattern provided
+    MatchAll,
     Substring,
     Regex,
 }
@@ -25,7 +29,7 @@ struct MatchedFile {
 
 struct Config {
     dirs: Vec<PathBuf>,
-    pattern: String,
+    pattern: Option<String>,
     search_type: SearchType,
 }
 
@@ -42,16 +46,18 @@ impl Config {
         };
         let path = env::var("PATH").expect("Failed to get PATH");
         let dirs = env::split_paths(&path).collect();
-        let search_type = if args.regex {
+        let search_type = if args.pattern.is_none() {
+            SearchType::MatchAll
+        } else if args.regex {
             SearchType::Regex
         } else {
             SearchType::Substring
         };
 
         Config {
-            dirs: dirs,
-            pattern: args.pattern.unwrap_or(String::from("undefined")),
-            search_type: search_type,
+            dirs,
+            pattern: args.pattern,
+            search_type,
         }
     }
 
@@ -95,13 +101,7 @@ impl Args {
             }
         }
 
-        match pattern {
-            Some(p) => Ok(Args {
-                pattern: Some(p),
-                regex,
-            }),
-            None => Err("Missing required argument: <pattern>".to_string()),
-        }
+        Ok(Args { pattern, regex })
     }
 }
 
@@ -128,8 +128,20 @@ fn main() -> process::ExitCode {
     }
 
     let filename_filter: Box<dyn FileNameFilter> = match config.search_type {
-        SearchType::Substring => Box::new(SubstringFilter::new(&config.pattern)),
-        SearchType::Regex => Box::new(RegexFilter::new(&config.pattern).unwrap()),
+        SearchType::MatchAll => Box::new(MatchAllFilter::default()),
+        SearchType::Substring => Box::new(SubstringFilter::new(
+            &config
+                .pattern
+                .expect("pattern required for substring search"),
+        )),
+        SearchType::Regex => {
+            let pattern = config.pattern.expect("pattern required for regex search");
+            let filter = RegexFilter::new(&pattern).unwrap_or_else(|err| {
+                eprintln!("Invalid regex pattern '{}': {}", pattern, err);
+                process::exit(1);
+            });
+            Box::new(filter)
+        }
     };
 
     let mut matched_files: Vec<MatchedFile> = Vec::new();
