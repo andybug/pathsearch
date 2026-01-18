@@ -223,7 +223,9 @@ impl FormattedOutput {
     fn new(color: bool) -> Self {
         match color {
             true => Self {
-                dir_ansi: "\x1B[38;5;250m",
+                // decreased intensity
+                dir_ansi: "\x1B[2m",
+                // bold red foreground
                 match_ansi: "\x1B[1;31m",
                 reset_ansi: "\x1B[0m",
             },
