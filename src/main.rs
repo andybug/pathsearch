@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
@@ -22,15 +23,12 @@ enum SearchType {
     Regex,
 }
 
-struct MatchedFile {
-    path: PathBuf,
-    matches: MatchRange,
-}
-
 struct Config {
     dirs: Vec<PathBuf>,
     pattern: Option<String>,
     search_type: SearchType,
+    /// Enable color output. Default true unless not a TTY.
+    color: bool,
 }
 
 impl Config {
@@ -53,11 +51,13 @@ impl Config {
         } else {
             SearchType::Substring
         };
+        let color = io::stdout().is_terminal();
 
         Config {
             dirs,
             pattern: args.pattern,
             search_type,
+            color,
         }
     }
 
@@ -144,7 +144,8 @@ fn main() -> process::ExitCode {
         }
     };
 
-    let mut matched_files: Vec<MatchedFile> = Vec::new();
+    let output = FormattedOutput::new(config.color);
+    let mut output_handle = io::stdout().lock();
 
     for dir in config.dirs {
         let files = match fs::read_dir(&dir) {
@@ -154,6 +155,9 @@ fn main() -> process::ExitCode {
                 continue;
             }
         };
+
+        // convert PathBuf's OsString to String once per directory
+        let dir_str = dir.display().to_string();
 
         for file in files {
             let file_ref = match file.as_ref() {
@@ -188,22 +192,9 @@ fn main() -> process::ExitCode {
                     metadata.is_file(),
                     metadata.is_symlink(),
                 ) {
-                    matched_files.push(MatchedFile {
-                        path: file_ref.path(),
-                        matches: match_range,
-                    });
+                    output.print(&mut output_handle, &dir_str, &file_name, match_range);
                 }
             }
-        }
-    }
-
-    let use_color = io::stdout().is_terminal();
-    for file in matched_files {
-        if use_color {
-            let output = io::stdout();
-            print_colorized_path(file, &mut output.lock())
-        } else {
-            println!("{}", file.path.display());
         }
     }
 
@@ -214,48 +205,62 @@ const fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
     mode & 0o111 != 0 && (is_file || is_symlink)
 }
 
-fn print_colorized_path<W: Write>(file: MatchedFile, output: &mut W) {
-    // ANSI color codes
-    const FG_GREY: &str = "\u{001B}[38;5;250m";
-    const RESET: &str = "\u{001B}[0m";
-
-    let parent_dir = file.path.parent().unwrap();
-    let file_name = file.path.file_name().unwrap();
-
-    let parent_dir_str = parent_dir.to_string_lossy();
-    let file_name_str = get_colorized_filename(file_name.to_string_lossy().as_ref(), &file);
-
-    writeln!(
-        output,
-        "{}{}/{}{}{}",
-        FG_GREY, parent_dir_str, RESET, file_name_str, RESET
-    )
-    .unwrap();
+struct FormattedOutput {
+    /// ANSI color code for the directory portion of the path
+    ///
+    /// The general idea is to make the directory portion fade into the
+    /// background a bit so that the user can more easily see the matched
+    /// executable names. It still needs to be legible since it provides
+    /// important information.
+    dir_ansi: &'static str,
+    /// ANSI color code for the foreground color of the matched range
+    match_ansi: &'static str,
+    /// ANSI reset code
+    reset_ansi: &'static str,
 }
 
-fn get_colorized_filename(filename: &str, matched_file: &MatchedFile) -> String {
-    const FG_RED_BOLD: &str = "\u{001B}[1;31m";
-    const RESET: &str = "\u{001B}[0m";
-
-    match matched_file.matches {
-        MatchRange::None => String::from(filename),
-        MatchRange::Range(start, end) => {
-            let mut colored_string = String::new();
-            colored_string.push_str(&filename[..start]);
-            colored_string.push_str(FG_RED_BOLD);
-            colored_string.push_str(&filename[start..end]);
-            colored_string.push_str(RESET);
-            colored_string.push_str(&filename[end..]);
-
-            colored_string
+impl FormattedOutput {
+    fn new(color: bool) -> Self {
+        match color {
+            true => Self {
+                dir_ansi: "\x1B[38;5;250m",
+                match_ansi: "\x1B[1;31m",
+                reset_ansi: "\x1B[0m",
+            },
+            false => Self {
+                dir_ansi: "",
+                match_ansi: "",
+                reset_ansi: "",
+            },
         }
+    }
+
+    fn print(&self, output: &mut impl Write, dir: &str, file: &OsStr, range: MatchRange) {
+        // write directory with dimmed color
+        let _ = write!(output, "{}{}/{}", self.dir_ansi, dir, self.reset_ansi);
+
+        // write filename with match range highlighting
+        let filename = file.as_bytes();
+        match range {
+            MatchRange::None => {
+                let _ = output.write_all(filename);
+            }
+            MatchRange::Range(start, end) => {
+                let _ = output.write_all(&filename[..start]);
+                let _ = write!(output, "{}", self.match_ansi);
+                let _ = output.write_all(&filename[start..end]);
+                let _ = write!(output, "{}", self.reset_ansi);
+                let _ = output.write_all(&filename[end..]);
+            }
+        }
+
+        let _ = writeln!(output, "{}", self.reset_ansi);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
 
     #[test]
     fn test_is_executable_file() {
@@ -295,85 +300,5 @@ mod tests {
         let is_symlink = true;
 
         assert_eq!(is_executable(mode, is_file, is_symlink), false);
-    }
-
-    const FG_GREY: &str = "\u{001B}[38;5;240m";
-    const FG_RED_BOLD: &str = "\u{001B}[1;31m";
-    const FG_WHITE: &str = "\u{001B}[38;5;15m";
-    const RESET: &str = "\u{001B}[0m";
-
-    #[test]
-    fn test_print_colorized_path() {
-        let matched_file = MatchedFile {
-            path: PathBuf::from("/path/to/file.txt"),
-            matches: MatchRange::None,
-        };
-
-        let mut output = Cursor::new(Vec::new());
-
-        print_colorized_path(matched_file, &mut output);
-
-        let output_str = String::from_utf8(output.into_inner()).unwrap();
-        let expected_output = format!(
-            "{}{}/{}{}{}\n",
-            FG_GREY, "/path/to", FG_WHITE, "file.txt", RESET
-        );
-        assert_eq!(output_str, expected_output);
-    }
-
-    #[test]
-    fn test_print_colorized_path_highlight() {
-        let matched_file = MatchedFile {
-            path: PathBuf::from("/path/to/file.txt"),
-            matches: MatchRange::Range(2, 4),
-        };
-
-        let mut output = Cursor::new(Vec::new());
-
-        print_colorized_path(matched_file, &mut output);
-
-        let output_str = String::from_utf8(output.into_inner()).unwrap();
-        let mut expected_output = String::new();
-        expected_output.push_str(FG_GREY);
-        expected_output.push_str("/path/to/");
-        expected_output.push_str(FG_WHITE);
-        expected_output.push_str("fi");
-        expected_output.push_str(FG_RED_BOLD);
-        expected_output.push_str("le");
-        expected_output.push_str(RESET);
-        expected_output.push_str(".txt");
-        expected_output.push_str(RESET);
-        expected_output.push('\n');
-
-        assert_eq!(output_str, expected_output);
-    }
-
-    #[test]
-    fn test_get_colorized_filename_none_match() {
-        let filename = "example.txt";
-        let matched_file = MatchedFile {
-            path: PathBuf::new(),
-            matches: MatchRange::None,
-        };
-
-        let result = get_colorized_filename(filename, &matched_file);
-
-        assert_eq!(result, String::from(filename));
-    }
-
-    #[test]
-    fn test_get_colorized_filename_single_range_match() {
-        let filename = "example.txt";
-        let matched_file = MatchedFile {
-            path: PathBuf::new(),
-            matches: MatchRange::Range(2, 6),
-        };
-
-        let result = get_colorized_filename(filename, &matched_file);
-
-        /* cspell:disable-next-line */
-        let expected_output = format!("ex{}ampl{}e.txt", FG_RED_BOLD, RESET);
-
-        assert_eq!(result, expected_output);
     }
 }

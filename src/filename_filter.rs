@@ -6,7 +6,7 @@ pub enum FilterResult {
     NoMatch,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MatchRange {
     None,
     Range(usize, usize),
