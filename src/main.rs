@@ -13,6 +13,15 @@ use filename_filter::{
 struct Args {
     pattern: Option<String>,
     regex: bool,
+    color: ColorOption,
+}
+
+#[derive(Default, Clone, Copy)]
+enum ColorOption {
+    #[default]
+    Auto,
+    Always,
+    Never,
 }
 
 #[derive(PartialEq, PartialOrd)]
@@ -51,7 +60,11 @@ impl Config {
         } else {
             SearchType::Substring
         };
-        let color = io::stdout().is_terminal();
+        let color = match args.color {
+            ColorOption::Auto => io::stdout().is_terminal(),
+            ColorOption::Always => true,
+            ColorOption::Never => false,
+        };
 
         Config {
             dirs,
@@ -77,6 +90,7 @@ impl Args {
         let mut args_iter = env::args().skip(1);
         let mut pattern = None;
         let mut regex = false;
+        let mut color = ColorOption::Auto;
 
         while let Some(arg) = args_iter.next() {
             match arg.as_str() {
@@ -88,6 +102,16 @@ impl Args {
                 "-V" | "--version" => {
                     println!("pathsearch {}", env!("CARGO_PKG_VERSION"));
                     process::exit(0);
+                }
+                "--color" => {
+                    let value = args_iter
+                        .next()
+                        .ok_or("--color requires a value (auto, always, never)")?;
+                    color = parse_color_option(&value)?;
+                }
+                s if s.starts_with("--color=") => {
+                    let value = &s["--color=".len()..];
+                    color = parse_color_option(value)?;
                 }
                 s if s.starts_with("-") => {
                     return Err(format!("Unknown option: {}", s));
@@ -101,7 +125,23 @@ impl Args {
             }
         }
 
-        Ok(Args { pattern, regex })
+        Ok(Args {
+            pattern,
+            regex,
+            color,
+        })
+    }
+}
+
+fn parse_color_option(s: &str) -> Result<ColorOption, String> {
+    match s {
+        "auto" => Ok(ColorOption::Auto),
+        "always" => Ok(ColorOption::Always),
+        "never" => Ok(ColorOption::Never),
+        _ => Err(format!(
+            "Invalid color option '{}'. Use 'auto', 'always', or 'never'",
+            s
+        )),
     }
 }
 
@@ -116,9 +156,10 @@ fn print_help() {
     println!("    <pattern>    Search pattern (substring, or regex with -r)");
     println!();
     println!("OPTIONS:");
-    println!("    -r, --regex    Interpret pattern as regex");
-    println!("    -h, --help     Print help");
-    println!("    -V, --version  Print version");
+    println!("    -r, --regex              Interpret pattern as regex");
+    println!("        --color <WHEN>       Control color output [auto, always, never]");
+    println!("    -h, --help               Print help");
+    println!("    -V, --version            Print version");
 }
 
 fn main() -> process::ExitCode {
