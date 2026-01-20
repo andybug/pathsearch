@@ -81,7 +81,7 @@ impl Config {
     }
 
     fn validate(&self) -> bool {
-        if self.dirs.len() == 0 {
+        if self.dirs.is_empty() {
             eprintln!("No directories in PATH");
             return false;
         }
