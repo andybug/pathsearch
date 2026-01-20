@@ -1,0 +1,62 @@
+.TH PATHSEARCH 1 "January 2026" "pathsearch 0.2.0" "User Commands"
+.SH NAME
+pathsearch \- search for executables in PATH
+.SH SYNOPSIS
+.B pathsearch
+[\fIOPTIONS\fR] [\fIPATTERN\fR]
+.SH DESCRIPTION
+.B pathsearch
+searches each directory in the PATH environment variable for executable
+files matching the given pattern. Results are displayed in PATH order,
+so the first result is the executable that would run if you typed the
+command.
+.PP
+If no pattern is provided, all executables in PATH are listed.
+.SH OPTIONS
+.TP
+.BR \-r ", " \-\-regex
+Interpret the pattern as a regular expression instead of a substring.
+.TP
+.BR \-\-color " " \fIWHEN\fR
+Control color output. WHEN can be \fBauto\fR (default), \fBalways\fR, or \fBnever\fR.
+Auto enables color when output is a terminal.
+.TP
+.BR \-h ", " \-\-help
+Print help information.
+.TP
+.BR \-V ", " \-\-version
+Print version information.
+.SH PATTERN MATCHING
+By default, pathsearch performs case-sensitive substring matching.
+.PP
+With \fB\-r\fR, the pattern is interpreted as a regular expression.
+Use \fB^pattern\fR to match at the start of filenames, or
+\fBpattern$\fR to match at the end.
+.SH EXAMPLES
+.TP
+Find executables containing "vim":
+.B pathsearch vim
+.TP
+Find executables starting with "python":
+.B pathsearch \-r \(aq^python\(aq
+.TP
+List all executables:
+.B pathsearch
+.TP
+Pipe to fzf for interactive selection:
+.B pathsearch | fzf
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Error (invalid arguments, unreadable PATH, etc.)
+.SH ENVIRONMENT
+.TP
+.B PATH
+Colon-separated list of directories to search.
+.SH SEE ALSO
+.BR which (1),
+.BR whereis (1),
+.BR type (1)
