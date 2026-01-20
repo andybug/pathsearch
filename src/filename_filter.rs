@@ -1,3 +1,12 @@
+//! Filename filtering for pattern matching.
+//!
+//! Provides a trait-based abstraction for different matching strategies:
+//! - MatchAllFilter: matches everything (used when no pattern provided)
+//! - SubstringFilter: case-sensitive substring matching
+//! - RegexFilter: full regex matching via the regex crate
+//!
+//! All filters operate on raw bytes (&[u8]) to handle non-UTF8 filenames.
+
 use regex::bytes::Regex;
 
 #[derive(Debug, PartialEq)]
@@ -39,6 +48,8 @@ impl SubstringFilter {
 
 impl FileNameFilter for SubstringFilter {
     fn filter(&self, filename: &[u8]) -> FilterResult {
+        // Use sliding window iterator for efficient byte-level substring search.
+        // windows() yields overlapping slices of pattern length, position() finds first match.
         match filename
             .windows(self.pattern.len())
             .position(|window| window == self.pattern.as_slice())

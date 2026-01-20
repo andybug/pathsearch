@@ -1,3 +1,9 @@
+//! pathsearch - Search for executables in PATH
+//!
+//! Searches each directory in the PATH environment variable for executable files
+//! matching a given pattern. Results are displayed in PATH order, so the first
+//! match is the executable that would run if you typed the command.
+
 use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
 use std::os::unix::ffi::OsStrExt;
@@ -188,6 +194,7 @@ fn main() -> process::ExitCode {
     let output = FormattedOutput::new(config.color);
     let mut output_handle = io::stdout().lock();
 
+    // Iterate PATH directories in order. First match = what the shell would execute.
     for dir in config.dirs {
         let files = match fs::read_dir(&dir) {
             Ok(files) => files,
@@ -242,6 +249,10 @@ fn main() -> process::ExitCode {
     process::ExitCode::SUCCESS
 }
 
+/// Check if a file is executable.
+///
+/// The mode mask 0o111 checks for any execute bit (owner, group, or other).
+/// We accept regular files and symlinks (symlinks to executables are common in PATH).
 const fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
     mode & 0o111 != 0 && (is_file || is_symlink)
 }
@@ -278,6 +289,10 @@ impl FormattedOutput {
         }
     }
 
+    /// Print a matching executable path with optional color highlighting.
+    ///
+    /// Uses byte-level output (write_all) to correctly handle non-UTF8 filenames,
+    /// which are valid on Unix filesystems.
     fn print(&self, output: &mut impl Write, dir: &str, file: &OsStr, range: MatchRange) {
         // write directory with dimmed color
         let _ = write!(output, "{}{}/{}", self.dir_ansi, dir, self.reset_ansi);

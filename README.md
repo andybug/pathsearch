@@ -1,59 +1,74 @@
 # pathsearch
 
-pathsearch is a Rust program that searches the user's PATH for a given query,
-providing a list of executables that match the query. This program was written
-with the help of AI, using the GPT-3.5 architecture from OpenAI.
+Search for executables in your PATH.
 
 ## Features
 
-- Searches the user's PATH for a given search query
-- Outputs all the executables in the PATH if no search query is provided
-- Supports substring, regex, and fuzzy searches
-- Can sort substring searches by similarity to the given search query
-- Colorizes the output for easier reading
+- Searches PATH directories in order (first match = what your shell executes)
+- Substring matching (default) or regex matching (-r)
+- Color output with match highlighting (auto-detects TTY)
+- Handles non-UTF8 filenames correctly
+
+## Installation
+
+### From source
+
+```shell
+cargo build --release
+cp target/release/pathsearch ~/.local/bin/
+```
+
+### Arch Linux (AUR)
+
+```shell
+yay -S pathsearch
+# or
+paru -S pathsearch
+```
 
 ## Usage
 
-    Usage: pathsearch [OPTIONS] [filename]
+```
+pathsearch [OPTIONS] [pattern]
 
-    Arguments:
-      [filename]  Search query
+Arguments:
+  [pattern]    Search pattern (substring match by default)
 
-    Options:
-      -r, --regex          Use regex matching
-      -f, --fuzzy          Use fuzzy matching
-      -s, --sort           Sort files by similarity to search
-          --color <COLOR>  Choose whether to emit color output [default: auto] [possible values: auto, always, never]
-      -h, --help           Print help
-      -V, --version        Print version
+Options:
+  -r, --regex        Interpret pattern as regex
+      --color WHEN   Control color output [auto, always, never]
+  -h, --help         Print help
+  -V, --version      Print version
+```
 
 ## Examples
 
-Search for executables that contain the substring "vim" and sorted by
-similarity:
+Find executables containing "vim":
 
 ```shell
-$ pathsearch -s vim
+$ pathsearch vim
 /usr/bin/vim
-/usr/bin/rvim
+/usr/bin/gvim
 /usr/bin/nvim
-/usr/bin/vimdot
-/usr/bin/vimdiff
-/usr/bin/vimtutor
-/usr/bin/nvimgdiff
 ```
 
-## Interactive Fuzzy Searching
-
-The output of `pathsearch` can be consumed by `skim` or `fzf` for easy
-interactive querying.
+Find executables starting with "python" (regex):
 
 ```shell
-pathsearch | sk
+$ pathsearch -r '^python'
+/usr/bin/python
+/usr/bin/python3
 ```
 
-Optionally, force color on:
+List all executables in PATH:
 
 ```shell
-pathsearch --color always firefox | sk --ansi
+$ pathsearch
+```
+
+Pipe to fzf/skim for interactive selection:
+
+```shell
+$ pathsearch | fzf
+$ pathsearch --color always | sk --ansi
 ```
