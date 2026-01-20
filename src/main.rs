@@ -198,8 +198,8 @@ fn main() -> process::ExitCode {
     for dir in config.dirs {
         let files = match fs::read_dir(&dir) {
             Ok(files) => files,
-            Err(e) => {
-                eprintln!("Failed to read directory: '{}': {}", dir.display(), e);
+            Err(_) => {
+                // users often have nonexistent directories in their PATH, silently ignore them
                 continue;
             }
         };
@@ -211,11 +211,7 @@ fn main() -> process::ExitCode {
             let file_ref = match file.as_ref() {
                 Ok(dir_entry) => dir_entry,
                 Err(err) => {
-                    eprintln!(
-                        "Failed to get directory entry in '{}': {}",
-                        dir.display(),
-                        err
-                    );
+                    eprintln!("Failed to get directory entry in '{}': {}", &dir_str, err);
                     continue;
                 }
             };
