@@ -214,7 +214,7 @@ fn main() -> process::ExitCode {
                 }
             };
             let file_name = file_ref.file_name().display().to_string();
-            let filter_result = filename_filter.filter(file_name.as_bytes());
+            let filter_result = filename_filter.filter(&file_name);
 
             if let FilterResult::Matched(match_range) = filter_result {
                 let metadata = match file_ref.metadata() {
