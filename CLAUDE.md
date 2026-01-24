@@ -14,17 +14,16 @@ The primary goal of this rewrite is to eliminate or minimize external dependenci
 - **No argument parsing crate** - Use manual `std::env::args()` parsing
 - **No fuzzy matching** - Removed as a feature (rarely used)
 - **No `atty`** - Use `std::io::IsTerminal` (stable since Rust 1.70)
-- **Regex is optional** - Simple prefix/suffix/contains patterns handled manually; `regex` crate only as fallback for complex patterns
+- **Minimal regex dependency** - Uses `regex` crate with `default-features = false` and only `std` and `unicode-perl` features
 
-Target: Zero dependencies for common use cases, optional `regex` dependency with `default-features = false` for complex patterns.
+Target: Single minimal dependency (`regex`) with reduced features for pattern matching.
 
-### Zero/Minimal Allocations
-Work directly with `OsStr` bytes to avoid unnecessary string conversions:
+### Simple String Processing
+Modern implementation using Rust's String type:
 
-- Use `std::os::unix::ffi::OsStrExt` to access `&[u8]` directly
-- Avoid `to_string_lossy()` allocations
-- Use `regex::bytes::Regex` when regex is needed
-- Pattern matching operates on `&[u8]`, not `&str`
+- Pattern matching uses standard String operations
+- Uses `regex::Regex` for regex patterns (operates on UTF-8 strings)
+- Simple and maintainable code prioritized over micro-optimizations
 
 ### Simple and Maintainable
 - Single-threaded (PATH is typically small, I/O is kernel-cached)
@@ -34,15 +33,16 @@ Work directly with `OsStr` bytes to avoid unnecessary string conversions:
 ## Command Line Interface
 
 ```
-pathsearch [OPTIONS] <pattern>
+pathsearch [OPTIONS] [pattern]
 
 Arguments:
-  <pattern>    Search pattern (substring, or regex with -r)
+  [pattern]      Search pattern (substring match by default, optional)
 
 Options:
-  -r, --regex    Interpret pattern as regex
-  -h, --help     Print help
-  -V, --version  Print version
+  -r, --regex        Interpret pattern as regex
+      --color WHEN   Control color output [auto, always, never]
+  -h, --help         Print help
+  -V, --version      Print version
 ```
 
 ## Pattern Matching Behavior
@@ -63,16 +63,21 @@ With `-r`:
 
 ## Platform
 
-Unix/Linux only (uses `OsStrExt::as_bytes()`). No Windows support needed.
+Cross-platform support for Unix-like systems (Linux, macOS) and Windows.
+
+Note: Current implementation uses `std::os::unix::fs::PermissionsExt` for executable checking on Unix-like systems. Windows support requires platform-specific executable detection.
 
 ## File Structure
 
 ```
 src/
-  main.rs      # Entry point, arg parsing, output
-  pattern.rs   # Pattern enum and matching logic (optional, could be in main.rs)
+  main.rs             # Entry point, arg parsing, output, executable checking
+  filename_filter.rs  # Pattern matching via trait-based filters
 Cargo.toml
-Claude.md
+CLAUDE.md
+README.md
+doc/
+  pathsearch.1        # Man page
 ```
 
 ## Build Configuration
@@ -80,38 +85,50 @@ Claude.md
 ```toml
 [package]
 name = "pathsearch"
-version = "0.2.0"
-edition = "2021"
+version = "0.2.1"
+edition = "2024"
 
 [dependencies]
-# Empty for simple patterns, or:
-# regex = { version = "1", default-features = false, features = ["std"], optional = true }
+regex = { version = "1", default-features = false, features = ["std", "unicode-perl"] }
 
-[features]
-default = []
-# regex = ["dep:regex"]  # Enable for complex regex support
+[profile.release]
+lto = true
+opt-level = "z"
+strip = true
 ```
 
 ## Implementation Notes
 
-### Pattern Parsing (when regex mode enabled)
+### Pattern Matching
+Implemented via trait-based filters in `filename_filter.rs`:
+
 ```rust
-enum Pattern<'a> {
-    Contains(&'a [u8]),
-    Prefix(&'a [u8]),
-    Suffix(&'a [u8]),
-    Regex(regex::bytes::Regex),
+pub trait FileNameFilter {
+    fn filter(&self, filename: &str) -> FilterResult;
+}
+
+pub enum FilterResult {
+    Matched(MatchRange),
+    NoMatch,
 }
 ```
 
-Detect simple anchored patterns (`^...` or `...$` without other metacharacters) and use direct byte comparison. Fall back to regex engine only for complex patterns.
+Three filter implementations:
+- `MatchAllFilter`: Matches everything (when no pattern provided)
+- `SubstringFilter`: Case-sensitive substring matching using `String::find()`
+- `RegexFilter`: Full regex matching via `regex::Regex`
 
 ### Directory Iteration
 ```rust
-for path_dir in std::env::var_os("PATH")?.as_bytes().split(|&b| b == b':') {
+for path_dir in std::env::var_os("PATH")?.to_string_lossy().split(':') {
     // Read directory, match filenames, check executable bit
 }
 ```
 
 ### Executable Check
+
+**Unix-like systems (Linux, macOS)**:
 Use `std::os::unix::fs::PermissionsExt` to check executable bit rather than spawning processes.
+
+**Windows**:
+Windows executable detection needs platform-specific implementation (checking file extensions like .exe, .bat, .cmd, or using Windows APIs).

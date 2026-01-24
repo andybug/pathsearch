@@ -1,4 +1,4 @@
-.TH PATHSEARCH 1 "January 2026" "pathsearch 0.2.0" "User Commands"
+.TH PATHSEARCH 1 "January 2026" "pathsearch 0.2.1" "User Commands"
 .SH NAME
 pathsearch \- search for executables in PATH
 .SH SYNOPSIS
@@ -7,9 +7,13 @@ pathsearch \- search for executables in PATH
 .SH DESCRIPTION
 .B pathsearch
 searches each directory in the PATH environment variable for executable
-files matching the given pattern. Results are displayed in PATH order,
-so the first result is the executable that would run if you typed the
-command.
+files matching the given pattern.
+.PP
+Results are displayed in PATH order\(emthe order they appear in your
+PATH environment variable. This means the first result is always the
+executable that would actually run if you typed the command in your shell.
+Subsequent results show any shadowed executables with the same name in
+later PATH directories.
 .PP
 If no pattern is provided, all executables in PATH are listed.
 .SH OPTIONS

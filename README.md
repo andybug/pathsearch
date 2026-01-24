@@ -4,18 +4,16 @@ Search for executables in your PATH.
 
 ## Features
 
-- Searches PATH directories in order (first match = what your shell executes)
+- **Respects PATH order**: Results are shown in the exact order they appear in your PATH. The first result is the executable that would actually run when you type the command in your shell.
 - Substring matching (default) or regex matching (-r)
 - Color output with match highlighting (auto-detects TTY)
-- Handles non-UTF8 filenames correctly
 
 ## Installation
 
-### From source
+### Cargo install
 
 ```shell
-cargo build --release
-cp target/release/pathsearch ~/.local/bin/
+cargo install --git https://github.com/andybug/pathsearch.git
 ```
 
 ### Arch Linux (AUR)
@@ -50,6 +48,14 @@ $ pathsearch vim
 /usr/bin/vim
 /usr/bin/gvim
 /usr/bin/nvim
+```
+
+Find which Python binary your shell would execute (check for shadowed versions):
+
+```shell
+$ pathsearch python3
+/home/user/.local/bin/python3     # This one would run
+/usr/bin/python3                  # Shadowed by the above
 ```
 
 Find executables starting with "python" (regex):
