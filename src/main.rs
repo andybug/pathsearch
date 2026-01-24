@@ -4,9 +4,7 @@
 //! matching a given pattern. Results are displayed in PATH order, so the first
 //! match is the executable that would run if you typed the command.
 
-use std::ffi::OsStr;
 use std::io::{self, IsTerminal, Write};
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs, process};
@@ -215,7 +213,7 @@ fn main() -> process::ExitCode {
                     continue;
                 }
             };
-            let file_name = file_ref.file_name();
+            let file_name = file_ref.file_name().display().to_string();
             let filter_result = filename_filter.filter(file_name.as_bytes());
 
             if let FilterResult::Matched(match_range) = filter_result {
@@ -286,10 +284,7 @@ impl FormattedOutput {
     }
 
     /// Print a matching executable path with optional color highlighting.
-    ///
-    /// Uses byte-level output (write_all) to correctly handle non-UTF8 filenames,
-    /// which are valid on Unix filesystems.
-    fn print(&self, output: &mut impl Write, dir: &str, file: &OsStr, range: MatchRange) {
+    fn print(&self, output: &mut impl Write, dir: &str, file: &str, range: MatchRange) {
         // write directory with dimmed color
         let _ = write!(output, "{}{}/{}", self.dir_ansi, dir, self.reset_ansi);
 
@@ -297,7 +292,7 @@ impl FormattedOutput {
         let filename = file.as_bytes();
         match range {
             MatchRange::None => {
-                let _ = output.write_all(filename);
+                let _ = output.write(filename);
             }
             MatchRange::Range(start, end) => {
                 let _ = output.write_all(&filename[..start]);
@@ -392,7 +387,7 @@ mod tests {
         fn print_no_color_no_match_range() {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
-            output.print(&mut buf, "/usr/bin", OsStr::new("ls"), MatchRange::None);
+            output.print(&mut buf, "/usr/bin", "ls", MatchRange::None);
             assert_eq!(String::from_utf8(buf).unwrap(), "/usr/bin/ls\n");
         }
 
@@ -400,12 +395,7 @@ mod tests {
         fn print_no_color_with_match_range() {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
-            output.print(
-                &mut buf,
-                "/usr/bin",
-                OsStr::new("grep"),
-                MatchRange::Range(0, 4),
-            );
+            output.print(&mut buf, "/usr/bin", "grep", MatchRange::Range(0, 4));
             assert_eq!(String::from_utf8(buf).unwrap(), "/usr/bin/grep\n");
         }
 
@@ -415,7 +405,7 @@ mod tests {
         fn print_color_no_match_range() {
             let output = FormattedOutput::new(true);
             let mut buf = Vec::new();
-            output.print(&mut buf, "/usr/bin", OsStr::new("ls"), MatchRange::None);
+            output.print(&mut buf, "/usr/bin", "ls", MatchRange::None);
             let result = String::from_utf8(buf).unwrap();
             // Directory should be dimmed, filename plain, ends with reset
             let expected = format!("{DIM}/usr/bin/{RESET}ls{RESET}\n");
@@ -426,12 +416,7 @@ mod tests {
         fn print_color_match_at_start() {
             let output = FormattedOutput::new(true);
             let mut buf = Vec::new();
-            output.print(
-                &mut buf,
-                "/usr/bin",
-                OsStr::new("grep"),
-                MatchRange::Range(0, 2),
-            );
+            output.print(&mut buf, "/usr/bin", "grep", MatchRange::Range(0, 2));
             let result = String::from_utf8(buf).unwrap();
             // "gr" highlighted, "ep" plain
             let expected = format!("{DIM}/usr/bin/{RESET}{BOLD_RED}gr{RESET}ep{RESET}\n");
@@ -442,12 +427,7 @@ mod tests {
         fn print_color_match_at_end() {
             let output = FormattedOutput::new(true);
             let mut buf = Vec::new();
-            output.print(
-                &mut buf,
-                "/usr/bin",
-                OsStr::new("grep"),
-                MatchRange::Range(2, 4),
-            );
+            output.print(&mut buf, "/usr/bin", "grep", MatchRange::Range(2, 4));
             let result = String::from_utf8(buf).unwrap();
             // "gr" plain, "ep" highlighted
             let expected = format!("{DIM}/usr/bin/{RESET}gr{BOLD_RED}ep{RESET}{RESET}\n");
@@ -458,12 +438,7 @@ mod tests {
         fn print_color_match_in_middle() {
             let output = FormattedOutput::new(true);
             let mut buf = Vec::new();
-            output.print(
-                &mut buf,
-                "/usr/bin",
-                OsStr::new("cargo"),
-                MatchRange::Range(1, 3),
-            );
+            output.print(&mut buf, "/usr/bin", "cargo", MatchRange::Range(1, 3));
             let result = String::from_utf8(buf).unwrap();
             // "c" plain, "ar" highlighted, "go" plain
             let expected = format!("{DIM}/usr/bin/{RESET}c{BOLD_RED}ar{RESET}go{RESET}\n");
@@ -474,12 +449,7 @@ mod tests {
         fn print_color_full_filename_match() {
             let output = FormattedOutput::new(true);
             let mut buf = Vec::new();
-            output.print(
-                &mut buf,
-                "/usr/bin",
-                OsStr::new("ls"),
-                MatchRange::Range(0, 2),
-            );
+            output.print(&mut buf, "/usr/bin", "ls", MatchRange::Range(0, 2));
             let result = String::from_utf8(buf).unwrap();
             // Entire "ls" highlighted
             let expected = format!("{DIM}/usr/bin/{RESET}{BOLD_RED}ls{RESET}{RESET}\n");
@@ -492,21 +462,8 @@ mod tests {
         fn print_empty_filename() {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
-            output.print(&mut buf, "/usr/bin", OsStr::new(""), MatchRange::None);
+            output.print(&mut buf, "/usr/bin", "", MatchRange::None);
             assert_eq!(String::from_utf8(buf).unwrap(), "/usr/bin/\n");
-        }
-
-        #[test]
-        fn print_non_utf8_filename() {
-            let output = FormattedOutput::new(false);
-            let mut buf = Vec::new();
-            // Create an OsStr with invalid UTF-8 bytes
-            use std::os::unix::ffi::OsStrExt;
-            let invalid_utf8: &[u8] = &[0x66, 0x6f, 0x6f, 0xff, 0x62, 0x61, 0x72]; // "foo\xffbar"
-            let filename = OsStr::from_bytes(invalid_utf8);
-            output.print(&mut buf, "/tmp", filename, MatchRange::Range(0, 3));
-            // Should handle the bytes directly without UTF-8 conversion issues
-            assert_eq!(buf, b"/tmp/foo\xffbar\n");
         }
 
         #[test]
@@ -514,7 +471,7 @@ mod tests {
             // Filenames could theoretically contain ANSI sequences
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
-            let filename = OsStr::new("file\x1B[31mred");
+            let filename = "file\x1B[31mred";
             output.print(&mut buf, "/tmp", filename, MatchRange::None);
             // Should pass through unchanged (no sanitization)
             assert_eq!(String::from_utf8(buf).unwrap(), "/tmp/file\x1B[31mred\n");
@@ -524,7 +481,7 @@ mod tests {
         fn print_empty_directory() {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
-            output.print(&mut buf, "", OsStr::new("ls"), MatchRange::None);
+            output.print(&mut buf, "", "ls", MatchRange::None);
             assert_eq!(String::from_utf8(buf).unwrap(), "/ls\n");
         }
 
@@ -534,12 +491,7 @@ mod tests {
         fn print_match_range_single_byte() {
             let output = FormattedOutput::new(true);
             let mut buf = Vec::new();
-            output.print(
-                &mut buf,
-                "/usr/bin",
-                OsStr::new("abc"),
-                MatchRange::Range(1, 2),
-            );
+            output.print(&mut buf, "/usr/bin", "abc", MatchRange::Range(1, 2));
             let result = String::from_utf8(buf).unwrap();
             // "a" plain, "b" highlighted, "c" plain
             let expected = format!("{DIM}/usr/bin/{RESET}a{BOLD_RED}b{RESET}c{RESET}\n");
@@ -552,7 +504,7 @@ mod tests {
             let output = FormattedOutput::new(true);
             let mut buf = Vec::new();
             // "café" - the 'é' is 2 bytes (0xc3 0xa9)
-            let filename = OsStr::new("café");
+            let filename = "café";
             // Match "af" which spans bytes 1-3 (the 'a' and first byte of 'é')
             // This tests that we're doing byte slicing, not character slicing
             output.print(&mut buf, "/tmp", filename, MatchRange::Range(1, 3));
