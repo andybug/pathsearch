@@ -1,10 +1,10 @@
 # pathsearch
 
-Search for executables in your PATH.
+Search for files in your PATH.
 
 ## Features
 
-- **Respects PATH order**: Results are shown in the exact order they appear in your PATH. The first result is the executable that would actually run when you type the command in your shell.
+- **Respects PATH order**: Results are shown in the exact order they appear in your PATH. The first result is the file that would actually run when you type the command in your shell.
 - Substring matching (default) or regex matching (-r)
 - Color output with match highlighting (auto-detects TTY)
 
@@ -41,7 +41,7 @@ Options:
 
 ## Examples
 
-Find executables containing "vim":
+Find files containing "vim":
 
 ```shell
 $ pathsearch vim
@@ -58,7 +58,7 @@ $ pathsearch python3
 /usr/bin/python3                  # Shadowed by the above
 ```
 
-Find executables starting with "python" (regex):
+Find files starting with "python" (regex):
 
 ```shell
 $ pathsearch -r '^python'
@@ -66,7 +66,7 @@ $ pathsearch -r '^python'
 /usr/bin/python3
 ```
 
-List all executables in PATH:
+List all files in PATH:
 
 ```shell
 $ pathsearch
