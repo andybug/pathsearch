@@ -1,10 +1,10 @@
 # pathsearch
 
-A lightweight Rust utility that searches for executables in `$PATH` directories.
+A lightweight Rust utility that searches for files in `$PATH` directories.
 
 ## What it does
 
-Searches each directory in `$PATH` (in order) and finds executables matching a given pattern. Results are displayed in the order they would be found during command execution, showing which executable would actually run and any shadowed alternatives.
+Searches each directory in `$PATH` (in order) and finds files matching a given pattern. Results are displayed in the order they would be found during command execution, showing which file would actually run and any shadowed alternatives.
 
 ## Design Goals
 
@@ -56,7 +56,7 @@ With `-r`:
 
 ## Output
 
-- One matching executable per line, full path
+- One matching file per line, full path
 - Ordered by PATH precedence (first = would be executed)
 - Color output: auto-detect TTY (use `std::io::IsTerminal`)
   - Consider: first match in green, shadowed matches dimmed
@@ -65,13 +65,11 @@ With `-r`:
 
 Cross-platform support for Unix-like systems (Linux, macOS) and Windows.
 
-Note: Current implementation uses `std::os::unix::fs::PermissionsExt` for executable checking on Unix-like systems. Windows support requires platform-specific executable detection.
-
 ## File Structure
 
 ```
 src/
-  main.rs             # Entry point, arg parsing, output, executable checking
+  main.rs             # Entry point, arg parsing, output
   filename_filter.rs  # Pattern matching via trait-based filters
 Cargo.toml
 CLAUDE.md
@@ -121,14 +119,6 @@ Three filter implementations:
 ### Directory Iteration
 ```rust
 for path_dir in std::env::var_os("PATH")?.to_string_lossy().split(':') {
-    // Read directory, match filenames, check executable bit
+    // Read directory, match filenames
 }
 ```
-
-### Executable Check
-
-**Unix-like systems (Linux, macOS)**:
-Use `std::os::unix::fs::PermissionsExt` to check executable bit rather than spawning processes.
-
-**Windows**:
-Windows executable detection needs platform-specific implementation (checking file extensions like .exe, .bat, .cmd, or using Windows APIs).

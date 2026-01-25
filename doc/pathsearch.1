@@ -1,21 +1,21 @@
 .TH PATHSEARCH 1 "January 2026" "pathsearch 0.2.1" "User Commands"
 .SH NAME
-pathsearch \- search for executables in PATH
+pathsearch \- search for files in PATH
 .SH SYNOPSIS
 .B pathsearch
 [\fIOPTIONS\fR] [\fIPATTERN\fR]
 .SH DESCRIPTION
 .B pathsearch
-searches each directory in the PATH environment variable for executable
-files matching the given pattern.
+searches each directory in the PATH environment variable for files
+matching the given pattern.
 .PP
 Results are displayed in PATH order\(emthe order they appear in your
 PATH environment variable. This means the first result is always the
-executable that would actually run if you typed the command in your shell.
-Subsequent results show any shadowed executables with the same name in
+file that would actually run if you typed the command in your shell.
+Subsequent results show any shadowed files with the same name in
 later PATH directories.
 .PP
-If no pattern is provided, all executables in PATH are listed.
+If no pattern is provided, all files in PATH are listed.
 .SH OPTIONS
 .TP
 .BR \-r ", " \-\-regex
@@ -38,13 +38,13 @@ Use \fB^pattern\fR to match at the start of filenames, or
 \fBpattern$\fR to match at the end.
 .SH EXAMPLES
 .TP
-Find executables containing "vim":
+Find files containing "vim":
 .B pathsearch vim
 .TP
-Find executables starting with "python":
+Find files starting with "python":
 .B pathsearch \-r \(aq^python\(aq
 .TP
-List all executables:
+List all files:
 .B pathsearch
 .TP
 Pipe to fzf for interactive selection:

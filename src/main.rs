@@ -1,11 +1,10 @@
-//! pathsearch - Search for executables in PATH
+//! pathsearch - Search for files in PATH
 //!
-//! Searches each directory in the PATH environment variable for executable files
+//! Searches each directory in the PATH environment variable for files
 //! matching a given pattern. Results are displayed in PATH order, so the first
-//! match is the executable that would run if you typed the command.
+//! match is the file that would run if you typed the command.
 
 use std::io::{self, IsTerminal, Write};
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::{env, fs, process};
 
@@ -151,7 +150,7 @@ fn parse_color_option(s: &str) -> Result<ColorOption, String> {
 
 fn print_help() {
     println!("pathsearch {}", env!("CARGO_PKG_VERSION"));
-    println!("Look for executables in the search path");
+    println!("Look for files in PATH");
     println!();
     println!("USAGE:");
     println!("    pathsearch [OPTIONS] <pattern>");
@@ -217,25 +216,7 @@ fn main() -> process::ExitCode {
             let filter_result = filename_filter.filter(&file_name);
 
             if let FilterResult::Matched(match_range) = filter_result {
-                let metadata = match file_ref.metadata() {
-                    Ok(metadata) => metadata,
-                    Err(err) => {
-                        eprintln!(
-                            "Failed to get file metadata for '{}': {}",
-                            file_ref.path().display(),
-                            err
-                        );
-                        continue;
-                    }
-                };
-
-                if is_executable(
-                    metadata.permissions().mode(),
-                    metadata.is_file(),
-                    metadata.is_symlink(),
-                ) {
-                    output.print(&mut output_handle, &dir_str, &file_name, match_range);
-                }
+                output.print(&mut output_handle, &dir_str, &file_name, match_range);
             }
         }
     }
@@ -243,20 +224,12 @@ fn main() -> process::ExitCode {
     process::ExitCode::SUCCESS
 }
 
-/// Check if a file is executable.
-///
-/// The mode mask 0o111 checks for any execute bit (owner, group, or other).
-/// We accept regular files and symlinks (symlinks to executables are common in PATH).
-const fn is_executable(mode: u32, is_file: bool, is_symlink: bool) -> bool {
-    mode & 0o111 != 0 && (is_file || is_symlink)
-}
-
 struct FormattedOutput {
     /// ANSI color code for the directory portion of the path
     ///
     /// The general idea is to make the directory portion fade into the
     /// background a bit so that the user can more easily see the matched
-    /// executable names. It still needs to be legible since it provides
+    /// filenames. It still needs to be legible since it provides
     /// important information.
     dir_ansi: &'static str,
     /// ANSI color code for the foreground color of the matched range
@@ -283,7 +256,7 @@ impl FormattedOutput {
         }
     }
 
-    /// Print a matching executable path with optional color highlighting.
+    /// Print a matching file path with optional color highlighting.
     fn print(&self, output: &mut impl Write, dir: &str, file: &str, range: MatchRange) {
         // write directory with dimmed color
         let _ = write!(output, "{}{}/{}", self.dir_ansi, dir, self.reset_ansi);
@@ -310,46 +283,6 @@ impl FormattedOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_is_executable_file() {
-        // Test when mode is executable, and it's a regular file
-        let mode = 0o755;
-        let is_file = true;
-        let is_symlink = false;
-
-        assert_eq!(is_executable(mode, is_file, is_symlink), true);
-    }
-
-    #[test]
-    fn test_is_executable_symlink() {
-        // Test when mode is executable, and it's a symbolic link
-        let mode = 0o777;
-        let is_file = false;
-        let is_symlink = true;
-
-        assert_eq!(is_executable(mode, is_file, is_symlink), true);
-    }
-
-    #[test]
-    fn test_is_not_executable_file() {
-        // Test when mode is not executable, and it's a regular file
-        let mode = 0o644;
-        let is_file = true;
-        let is_symlink = false;
-
-        assert_eq!(is_executable(mode, is_file, is_symlink), false);
-    }
-
-    #[test]
-    fn test_is_not_executable_symlink() {
-        // Test when mode is not executable, and it's a symbolic link
-        let mode = 0o600;
-        let is_file = false;
-        let is_symlink = true;
-
-        assert_eq!(is_executable(mode, is_file, is_symlink), false);
-    }
 
     // ========================================
     // FormattedOutput tests
