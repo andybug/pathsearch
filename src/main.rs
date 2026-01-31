@@ -5,7 +5,7 @@
 //! match is the file that would run if you typed the command.
 
 use std::io::{self, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{MAIN_SEPARATOR, PathBuf};
 use std::{env, fs, process};
 
 mod filename_filter;
@@ -259,7 +259,11 @@ impl FormattedOutput {
     /// Print a matching file path with optional color highlighting.
     fn print(&self, output: &mut impl Write, dir: &str, file: &str, range: MatchRange) {
         // write directory with dimmed color
-        let _ = write!(output, "{}{}/{}", self.dir_ansi, dir, self.reset_ansi);
+        let _ = write!(
+            output,
+            "{}{}{}{}",
+            self.dir_ansi, dir, MAIN_SEPARATOR, self.reset_ansi
+        );
 
         // write filename with match range highlighting
         let filename = file.as_bytes();
