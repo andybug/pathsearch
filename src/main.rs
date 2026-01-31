@@ -294,6 +294,7 @@ mod tests {
 
     mod formatted_output {
         use super::*;
+        use std::path::MAIN_SEPARATOR as SEP;
 
         // ANSI escape code constants for test assertions
         const DIM: &str = "\x1B[2m";
@@ -325,7 +326,10 @@ mod tests {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
             output.print(&mut buf, "/usr/bin", "ls", MatchRange::None);
-            assert_eq!(String::from_utf8(buf).unwrap(), "/usr/bin/ls\n");
+            assert_eq!(
+                String::from_utf8(buf).unwrap(),
+                format!("/usr/bin{SEP}ls\n")
+            );
         }
 
         #[test]
@@ -333,7 +337,10 @@ mod tests {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
             output.print(&mut buf, "/usr/bin", "grep", MatchRange::Range(0, 4));
-            assert_eq!(String::from_utf8(buf).unwrap(), "/usr/bin/grep\n");
+            assert_eq!(
+                String::from_utf8(buf).unwrap(),
+                format!("/usr/bin{SEP}grep\n")
+            );
         }
 
         // --- Print output tests (with color) ---
@@ -345,7 +352,7 @@ mod tests {
             output.print(&mut buf, "/usr/bin", "ls", MatchRange::None);
             let result = String::from_utf8(buf).unwrap();
             // Directory should be dimmed, filename plain, ends with reset
-            let expected = format!("{DIM}/usr/bin/{RESET}ls{RESET}\n");
+            let expected = format!("{DIM}/usr/bin{SEP}{RESET}ls{RESET}\n");
             assert_eq!(result, expected);
         }
 
@@ -356,7 +363,7 @@ mod tests {
             output.print(&mut buf, "/usr/bin", "grep", MatchRange::Range(0, 2));
             let result = String::from_utf8(buf).unwrap();
             // "gr" highlighted, "ep" plain
-            let expected = format!("{DIM}/usr/bin/{RESET}{BOLD_RED}gr{RESET}ep{RESET}\n");
+            let expected = format!("{DIM}/usr/bin{SEP}{RESET}{BOLD_RED}gr{RESET}ep{RESET}\n");
             assert_eq!(result, expected);
         }
 
@@ -367,7 +374,7 @@ mod tests {
             output.print(&mut buf, "/usr/bin", "grep", MatchRange::Range(2, 4));
             let result = String::from_utf8(buf).unwrap();
             // "gr" plain, "ep" highlighted
-            let expected = format!("{DIM}/usr/bin/{RESET}gr{BOLD_RED}ep{RESET}{RESET}\n");
+            let expected = format!("{DIM}/usr/bin{SEP}{RESET}gr{BOLD_RED}ep{RESET}{RESET}\n");
             assert_eq!(result, expected);
         }
 
@@ -378,7 +385,7 @@ mod tests {
             output.print(&mut buf, "/usr/bin", "cargo", MatchRange::Range(1, 3));
             let result = String::from_utf8(buf).unwrap();
             // "c" plain, "ar" highlighted, "go" plain
-            let expected = format!("{DIM}/usr/bin/{RESET}c{BOLD_RED}ar{RESET}go{RESET}\n");
+            let expected = format!("{DIM}/usr/bin{SEP}{RESET}c{BOLD_RED}ar{RESET}go{RESET}\n");
             assert_eq!(result, expected);
         }
 
@@ -389,7 +396,7 @@ mod tests {
             output.print(&mut buf, "/usr/bin", "ls", MatchRange::Range(0, 2));
             let result = String::from_utf8(buf).unwrap();
             // Entire "ls" highlighted
-            let expected = format!("{DIM}/usr/bin/{RESET}{BOLD_RED}ls{RESET}{RESET}\n");
+            let expected = format!("{DIM}/usr/bin{SEP}{RESET}{BOLD_RED}ls{RESET}{RESET}\n");
             assert_eq!(result, expected);
         }
 
@@ -400,7 +407,7 @@ mod tests {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
             output.print(&mut buf, "/usr/bin", "", MatchRange::None);
-            assert_eq!(String::from_utf8(buf).unwrap(), "/usr/bin/\n");
+            assert_eq!(String::from_utf8(buf).unwrap(), format!("/usr/bin{SEP}\n"));
         }
 
         #[test]
@@ -411,7 +418,10 @@ mod tests {
             let filename = "file\x1B[31mred";
             output.print(&mut buf, "/tmp", filename, MatchRange::None);
             // Should pass through unchanged (no sanitization)
-            assert_eq!(String::from_utf8(buf).unwrap(), "/tmp/file\x1B[31mred\n");
+            assert_eq!(
+                String::from_utf8(buf).unwrap(),
+                format!("/tmp{SEP}file\x1B[31mred\n")
+            );
         }
 
         #[test]
@@ -419,7 +429,7 @@ mod tests {
             let output = FormattedOutput::new(false);
             let mut buf = Vec::new();
             output.print(&mut buf, "", "ls", MatchRange::None);
-            assert_eq!(String::from_utf8(buf).unwrap(), "/ls\n");
+            assert_eq!(String::from_utf8(buf).unwrap(), format!("{SEP}ls\n"));
         }
 
         // --- Match range boundary tests ---
@@ -431,7 +441,7 @@ mod tests {
             output.print(&mut buf, "/usr/bin", "abc", MatchRange::Range(1, 2));
             let result = String::from_utf8(buf).unwrap();
             // "a" plain, "b" highlighted, "c" plain
-            let expected = format!("{DIM}/usr/bin/{RESET}a{BOLD_RED}b{RESET}c{RESET}\n");
+            let expected = format!("{DIM}/usr/bin{SEP}{RESET}a{BOLD_RED}b{RESET}c{RESET}\n");
             assert_eq!(result, expected);
         }
 
@@ -446,9 +456,8 @@ mod tests {
             // This tests that we're doing byte slicing, not character slicing
             output.print(&mut buf, "/tmp", filename, MatchRange::Range(1, 3));
             // The output will slice at byte boundaries
-            let result = buf;
             // "c" then highlighted "af" (bytes 1-3) then "é" remainder
-            assert!(result.len() > 0); // Just verify it doesn't panic
+            assert!(!buf.is_empty()); // Just verify it doesn't panic
         }
     }
 }
