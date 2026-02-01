@@ -5,7 +5,7 @@
 //! match is the file that would run if you typed the command.
 
 use std::io::{self, IsTerminal, Write};
-use std::path::{MAIN_SEPARATOR, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::{env, fs, process};
 
 mod filename_filter;
@@ -201,8 +201,7 @@ fn main() -> process::ExitCode {
             }
         };
 
-        // convert PathBuf's OsString to String once per directory
-        let dir_str = dir.display().to_string();
+        let dir_str = normalize_dir(&dir);
 
         for file in files {
             let file_ref = match file.as_ref() {
@@ -222,6 +221,15 @@ fn main() -> process::ExitCode {
     }
 
     process::ExitCode::SUCCESS
+}
+
+/// Normalize a directory path by removing trailing separators.
+///
+/// Converts the path to `String`, stripping any trailing path separators
+/// (`MAIN_SEPARATOR`).
+fn normalize_dir(pb: &Path) -> String {
+    let s = pb.display().to_string();
+    s.trim_end_matches(MAIN_SEPARATOR).to_string()
 }
 
 struct FormattedOutput {
@@ -287,6 +295,39 @@ impl FormattedOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================
+    //  normalize_dir tests
+    // ========================================
+
+    mod normalize_dir {
+        use super::*;
+        use std::path::{MAIN_SEPARATOR as SEP, PathBuf};
+
+        #[test]
+        fn no_path_separator_suffix() {
+            const DIR: &str = "/fake/dir";
+            let pb = PathBuf::from(DIR);
+            let normalized = normalize_dir(&pb);
+            assert_eq!(normalized, DIR);
+        }
+
+        #[test]
+        fn remove_path_separator_suffix() {
+            const DIR: &str = "/fake/dir";
+            let pb = PathBuf::from(format!("{DIR}{SEP}"));
+            let normalized = normalize_dir(&pb);
+            assert_eq!(normalized, DIR);
+        }
+
+        #[test]
+        fn remove_multiple_path_separator_suffix() {
+            const DIR: &str = "/fake/dir";
+            let pb = PathBuf::from(format!("{DIR}{SEP}{SEP}{SEP}"));
+            let normalized = normalize_dir(&pb);
+            assert_eq!(normalized, DIR);
+        }
+    }
 
     // ========================================
     // FormattedOutput tests
