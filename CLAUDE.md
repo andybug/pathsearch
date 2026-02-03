@@ -83,7 +83,7 @@ doc/
 ```toml
 [package]
 name = "pathsearch"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 
 [dependencies]
